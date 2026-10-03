@@ -1,0 +1,62 @@
+[
+    {
+        "id": 1,
+        "reader_id": 1,
+        "reader_name": "Aarav Sharma",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-09-30",
+        "return_date": "2026-09-30",
+        "status": "returned"
+    },
+    {
+        "id": 2,
+        "reader_id": 1,
+        "reader_name": "Aarav Sharma",
+        "book_id": 2,
+        "book_title": "The Great Gatsby",
+        "issue_date": "2026-09-30",
+        "return_date": null,
+        "status": "issued"
+    },
+    {
+        "id": 3,
+        "reader_id": 1,
+        "reader_name": "Aarav Sharma",
+        "book_id": 3,
+        "book_title": "Data Structures Using C",
+        "issue_date": "2026-09-30",
+        "return_date": null,
+        "status": "issued"
+    },
+    {
+        "id": 4,
+        "reader_id": 2,
+        "reader_name": "Priya Patel",
+        "book_id": 2,
+        "book_title": "The Great Gatsby",
+        "issue_date": "2026-10-01",
+        "return_date": "2026-10-01",
+        "status": "returned"
+    },
+    {
+        "id": 5,
+        "reader_id": 2,
+        "reader_name": "Priya Patel",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-10-01",
+        "return_date": "2026-10-01",
+        "status": "returned"
+    },
+    {
+        "id": 6,
+        "reader_id": 3,
+        "reader_name": "Rohan Gupta",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-10-03",
+        "return_date": "2026-10-03",
+        "status": "returned"
+    }
+]
