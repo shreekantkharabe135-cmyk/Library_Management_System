@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% block title %}My Bag - Library Management System{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="bag-page-layout">
+        <!-- Left: Bag Items -->
+        <div class="bag-left">
+            <h2 class="bag-heading">Books in your bag - <span id="bagItemCount">0</span></h2>
+
+            <div class="bag-items-list" id="bagItemsList">
+                <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading bag...</div>
+            </div>
+        </div>
+
+        <!-- Right: Checkout Panel -->
+        <div class="bag-right">
+            <div class="checkout-box">
+                <h3>Ready for Checkout?</h3>
+
+                <div class="checkout-form-table">
+                    <div class="checkout-field">
+                        <label>Reader ID :</label>
+                        <div class="checkout-field-input">
+                            <select id="checkoutReader">
+                                <option value="">-- Select a Reader --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="checkout-field" id="readerNameField">
+                        <label>Name :</label>
+                        <span class="checkout-field-value" id="readerNameDisplay"></span>
+                    </div>
+                    <div class="checkout-field" id="readerContactField">
+                        <label>Contact :</label>
+                        <span class="checkout-field-value" id="readerContactDisplay"></span>
+                    </div>
+                    <div class="checkout-field">
+                        <label>Issue Date :</label>
+                        <span class="checkout-field-value" id="issueDateDisplay"></span>
+                    </div>
+                </div>
+
+                <button class="btn btn-success btn-block checkout-btn" onclick="checkout()">
+                    <i class="fas fa-check"></i> Issue Books
+                </button>
+            </div>
+
+            <!-- Library Rules -->
+            <div class="library-rules">
+                <ul>
+                    <li>Readers should not mark, underline, write, or tear pages or otherwise damage the library documents.</li>
+                    <li>Readers are requested to handle all Library property carefully to avoid damage to it and also not to disturb other readers/users.</li>
+                    <li>No Library material can be taken out of the Library without permission of the Librarian.</li>
+                    <li>Four books are issued for maximum of two weeks and they must be returned on or before the due date specified above.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadBag();
+    loadReaders();
+    setIssueDate();
+});
+
+function setIssueDate() {
+    const now = new Date();
+    const options = { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+    document.getElementById('issueDateDisplay').textContent = now.toLocaleDateString('en-US', options);
+}
+
+async function loadBag() {
+    const res = await fetch('/api/bag');
+    const data = await res.json();
+    document.getElementById('bagItemCount').textContent = data.count;
+    renderBag(data.books);
+    updateBagCount(data.count);
+}
+
+async function loadReaders() {
+    const res = await fetch('/api/readers');
+    const readers = await res.json();
+    const select = document.getElementById('checkoutReader');
+    select.innerHTML = '<option value="">-- Select a Reader --</option>' +
+        readers.map(r => `<option value="${r.id}" data-name="${r.name}" data-phone="${r.phone}">${r.name} (#${r.id})</option>`).join('');
+
+    select.addEventListener('change', function() {
+        const opt = this.options[this.selectedIndex];
+        document.getElementById('readerNameDisplay').textContent = opt.dataset.name || '';
+        document.getElementById('readerContactDisplay').textContent = opt.dataset.phone || '';
+    });
+}
+
+function renderBag(books) {
+    const container = document.getElementById('bagItemsList');
+    if (books.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-shopping-bag"></i>
+                <p>Your bag is empty</p>
+                <a href="/books" class="btn btn-primary"><i class="fas fa-book"></i> Browse Books</a>
+            </div>`;
+        return;
+    }
+    container.innerHTML = books.map(book => `
+        <div class="bag-book-row">
+            <div class="bag-book-icon">
+                <i class="fas fa-book"></i>
+            </div>
+            <div class="bag-book-info">
+                <strong>${book.title}</strong>
+                <span>Written by ${book.author}</span>
+                <span>Genre: ${book.genre}</span>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeFromBag(${book.id})">
+                Remove
+            </button>
+        </div>
+    `).join('');
+}
+
+async function removeFromBag(id) {
+    const res = await fetch(`/api/bag/remove/${id}`, { method: 'POST' });
+    const result = await res.json();
+    showToast(result.message, result.success ? 'success' : 'error');
+    loadBag();
+}
+
+async function checkout() {
+    const readerId = document.getElementById('checkoutReader').value;
+    if (!readerId) {
+        showToast('Please select a reader', 'warning');
+        return;
+    }
+    const res = await fetch('/api/bag/checkout', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ reader_id: parseInt(readerId) })
+    });
+    const result = await res.json();
+    if (result.success) {
+        let msg = 'Books issued: ' + result.issued.join(', ');
+        if (result.errors && result.errors.length > 0) {
+            msg += '\nErrors: ' + result.errors.join(', ');
+        }
+        showToast(msg, 'success');
+        loadBag();
+    } else {
+        let msg = result.message || 'Checkout failed';
+        if (result.errors && result.errors.length > 0) {
+            msg += ': ' + result.errors.join(', ');
+        }
+        showToast(msg, 'error');
+    }
+}
+</script>
+{% endblock %}
