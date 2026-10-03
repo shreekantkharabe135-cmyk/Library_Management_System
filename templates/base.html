@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Library Management System{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">
+                <i class="fas fa-book-open"></i>
+                <span>Library OS</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+                <i class="fas fa-bars"></i>
+            </button>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}"><i class="fas fa-home"></i> Home</a></li>
+                <li><a href="/books" class="nav-link {% if request.path == '/books' %}active{% endif %}"><i class="fas fa-book"></i> Books</a></li>
+                <li><a href="/readers" class="nav-link {% if request.path == '/readers' %}active{% endif %}"><i class="fas fa-users"></i> Readers</a></li>
+                <li><a href="/bag" class="nav-link {% if request.path == '/bag' %}active{% endif %}"><i class="fas fa-shopping-bag"></i> My Bag <span class="bag-count" id="navBagCount">0</span></a></li>
+                <li><a href="/returns" class="nav-link {% if request.path == '/returns' %}active{% endif %}"><i class="fas fa-undo"></i> Returns</a></li>
+                <li><a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}"><i class="fas fa-chart-bar"></i> Dashboard</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    <div id="toast-container"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Library Management System | College Mini Project</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
