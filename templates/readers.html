@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block title %}Readers - Library Management System{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="page-header">
+        <h1><i class="fas fa-users"></i> Readers Management</h1>
+        <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-user-plus"></i> Register Reader</button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-bar">
+        <i class="fas fa-search"></i>
+        <input type="text" id="readerSearch" placeholder="Search by name, email or phone..." oninput="searchReaders()">
+    </div>
+
+    <!-- Readers Table -->
+    <div class="table-container">
+        <table class="data-table" id="readersTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Address</th>
+                    <th>Registered</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="readersBody">
+                <tr><td colspan="7" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Add/Edit Reader Modal -->
+<div class="modal-overlay" id="readerModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle"><i class="fas fa-user-plus"></i> Register New Reader</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="readerForm" onsubmit="saveReader(event)">
+            <input type="hidden" id="readerId">
+            <div class="form-group">
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" required placeholder="Enter full name">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" required placeholder="Enter email address">
+                </div>
+                <div class="form-group">
+                    <label for="phone">Phone *</label>
+                    <input type="text" id="phone" required placeholder="Enter phone number">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="address">Address *</label>
+                <input type="text" id="address" required placeholder="Enter address">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Reader</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allReaders = [];
+
+document.addEventListener('DOMContentLoaded', loadReaders);
+
+async function loadReaders() {
+    const res = await fetch('/api/readers');
+    allReaders = await res.json();
+    renderReaders(allReaders);
+}
+
+function searchReaders() {
+    const query = document.getElementById('readerSearch').value.toLowerCase();
+    if (!query) {
+        renderReaders(allReaders);
+        return;
+    }
+    const filtered = allReaders.filter(r =>
+        r.name.toLowerCase().includes(query) ||
+        r.email.toLowerCase().includes(query) ||
+        r.phone.includes(query)
+    );
+    renderReaders(filtered);
+}
+
+function renderReaders(readers) {
+    const tbody = document.getElementById('readersBody');
+    if (readers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-users"></i> No readers found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = readers.map(r => `
+        <tr>
+            <td><strong>#${r.id}</strong></td>
+            <td>${r.name}</td>
+            <td>${r.email}</td>
+            <td>${r.phone}</td>
+            <td>${r.address}</td>
+            <td>${r.date_registered}</td>
+            <td>
+                <div class="table-actions">
+                    <button class="btn btn-sm btn-warning" onclick="editReader(${r.id})" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteReader(${r.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openAddModal() {
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-user-plus"></i> Register New Reader';
+    document.getElementById('readerForm').reset();
+    document.getElementById('readerId').value = '';
+    document.getElementById('readerModal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('readerModal').classList.remove('active');
+}
+
+async function editReader(id) {
+    const res = await fetch(`/api/readers/${id}`);
+    const reader = await res.json();
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Reader';
+    document.getElementById('readerId').value = reader.id;
+    document.getElementById('name').value = reader.name;
+    document.getElementById('email').value = reader.email;
+    document.getElementById('phone').value = reader.phone;
+    document.getElementById('address').value = reader.address;
+    document.getElementById('readerModal').classList.add('active');
+}
+
+async function saveReader(e) {
+    e.preventDefault();
+    const id = document.getElementById('readerId').value;
+    const data = {
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        address: document.getElementById('address').value
+    };
+    const url = id ? `/api/readers/${id}` : '/api/readers';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+        method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+        showToast(id ? 'Reader updated!' : 'Reader registered!', 'success');
+        closeModal();
+        loadReaders();
+    } else {
+        showToast(result.message || 'Error saving reader', 'error');
+    }
+}
+
+async function deleteReader(id) {
+    if (!confirm('Delete this reader?')) return;
+    const res = await fetch(`/api/readers/${id}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+        showToast('Reader deleted', 'success');
+        loadReaders();
+    } else {
+        showToast(result.message, 'error');
+    }
+}
+</script>
+{% endblock %}
