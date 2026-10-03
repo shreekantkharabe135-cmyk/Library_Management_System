@@ -1,0 +1,102 @@
+[
+    {
+        "id": 1,
+        "title": "To Kill a Mockingbird",
+        "author": "Harper Lee",
+        "genre": "Fiction",
+        "isbn": "978-0061120084",
+        "total_copies": 5,
+        "available_copies": 5,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 2,
+        "title": "The Great Gatsby",
+        "author": "F. Scott Fitzgerald",
+        "genre": "Fiction",
+        "isbn": "978-0743273565",
+        "total_copies": 3,
+        "available_copies": 2,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 3,
+        "title": "Data Structures Using C",
+        "author": "Reema Thareja",
+        "genre": "Computer Science",
+        "isbn": "978-0198099307",
+        "total_copies": 8,
+        "available_copies": 7,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 4,
+        "title": "Introduction to Algorithms",
+        "author": "Thomas H. Cormen",
+        "genre": "Computer Science",
+        "isbn": "978-0262033848",
+        "total_copies": 4,
+        "available_copies": 4,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 5,
+        "title": "Physics for Engineers",
+        "author": "R.K. Gaur",
+        "genre": "Science",
+        "isbn": "978-8131517468",
+        "total_copies": 6,
+        "available_copies": 6,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 6,
+        "title": "Engineering Mathematics",
+        "author": "B.S. Grewal",
+        "genre": "Mathematics",
+        "isbn": "978-8174091154",
+        "total_copies": 10,
+        "available_copies": 10,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 7,
+        "title": "The Alchemist",
+        "author": "Paulo Coelho",
+        "genre": "Fiction",
+        "isbn": "978-0062315007",
+        "total_copies": 4,
+        "available_copies": 4,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 8,
+        "title": "Python Programming",
+        "author": "Mark Lutz",
+        "genre": "Computer Science",
+        "isbn": "978-1449355739",
+        "total_copies": 7,
+        "available_copies": 7,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 9,
+        "title": "Discrete Mathematics",
+        "author": "Kenneth H. Rosen",
+        "genre": "Mathematics",
+        "isbn": "978-0073383095",
+        "total_copies": 5,
+        "available_copies": 5,
+        "date_added": "2026-09-30"
+    },
+    {
+        "id": 10,
+        "title": "Database System Concepts",
+        "author": "Abraham Silberschatz",
+        "genre": "Computer Science",
+        "isbn": "978-0078022159",
+        "total_copies": 6,
+        "available_copies": 6,
+        "date_added": "2026-09-30"
+    }
+]
