@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Returns - Library Management System{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="page-header">
+        <h1><i class="fas fa-undo"></i> Book Returns</h1>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-bar">
+        <div class="filter-group">
+            <label>Filter by Reader:</label>
+            <select id="readerFilter" onchange="loadTransactions()">
+                <option value="">All Readers</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Status:</label>
+            <select id="statusFilter" onchange="loadTransactions()">
+                <option value="issued">Currently Issued</option>
+                <option value="">All Transactions</option>
+                <option value="returned">Returned</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Book</th>
+                    <th>Reader</th>
+                    <th>Issue Date</th>
+                    <th>Return Date</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="transactionsBody">
+                <tr><td colspan="7" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadReaderOptions();
+    loadTransactions();
+});
+
+async function loadReaderOptions() {
+    const res = await fetch('/api/readers');
+    const readers = await res.json();
+    const select = document.getElementById('readerFilter');
+    readers.forEach(r => {
+        select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
+    });
+}
+
+async function loadTransactions() {
+    const status = document.getElementById('statusFilter').value;
+    const readerId = document.getElementById('readerFilter').value;
+    let url = '/api/transactions?';
+    if (status) url += `status=${status}&`;
+    if (readerId) url += `reader_id=${readerId}&`;
+    
+    const res = await fetch(url);
+    const transactions = await res.json();
+    renderTransactions(transactions);
+}
+
+function renderTransactions(transactions) {
+    const tbody = document.getElementById('transactionsBody');
+    if (transactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-check-circle"></i> No transactions found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = transactions.map(t => `
+        <tr>
+            <td><strong>#${t.id}</strong></td>
+            <td>${t.book_title}</td>
+            <td>${t.reader_name}</td>
+            <td>${t.issue_date}</td>
+            <td>${t.return_date || '-'}</td>
+            <td><span class="badge ${t.status === 'issued' ? 'badge-warning' : 'badge-success'}">${t.status}</span></td>
+            <td>
+                ${t.status === 'issued' 
+                    ? `<button class="btn btn-sm btn-primary" onclick="returnBook(${t.id})"><i class="fas fa-undo"></i> Return</button>`
+                    : '<span class="text-muted">Completed</span>'
+                }
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function returnBook(id) {
+    if (!confirm('Confirm return of this book?')) return;
+    const res = await fetch(`/api/transactions/return/${id}`, { method: 'POST' });
+    const result = await res.json();
+    showToast(result.message, result.success ? 'success' : 'error');
+    loadTransactions();
+}
+</script>
+{% endblock %}
