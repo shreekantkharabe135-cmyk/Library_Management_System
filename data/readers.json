@@ -1,0 +1,42 @@
+[
+    {
+        "id": 1,
+        "name": "Aarav Sharma",
+        "email": "aarav@email.com",
+        "phone": "9876543210",
+        "address": "Delhi",
+        "date_registered": "2026-09-30"
+    },
+    {
+        "id": 2,
+        "name": "Priya Patel",
+        "email": "priya@email.com",
+        "phone": "9876543211",
+        "address": "Mumbai",
+        "date_registered": "2026-09-30"
+    },
+    {
+        "id": 3,
+        "name": "Rohan Gupta",
+        "email": "rohan@email.com",
+        "phone": "9876543212",
+        "address": "Bangalore",
+        "date_registered": "2026-09-30"
+    },
+    {
+        "id": 4,
+        "name": "Sneha Reddy",
+        "email": "sneha@email.com",
+        "phone": "9876543213",
+        "address": "Hyderabad",
+        "date_registered": "2026-09-30"
+    },
+    {
+        "id": 5,
+        "name": "Vikram Singh",
+        "email": "vikram@email.com",
+        "phone": "9876543214",
+        "address": "Pune",
+        "date_registered": "2026-09-30"
+    }
+]
