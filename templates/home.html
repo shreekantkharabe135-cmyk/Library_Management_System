@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard - Library OS{% endblock %}
+
+{% block content %}
+<!-- Glassmorphism Hero Section -->
+<section class="hero glass-hero">
+    <div class="hero-content">
+        <h1 class="gradient-text">Welcome to Library OS</h1>
+        <p class="subtitle">An elegant, modern ecosystem for resource management.</p>
+        <div class="hero-buttons">
+            <a href="/books" class="btn btn-primary glass-btn"><i class="fas fa-book"></i> Browse Catalog</a>
+            <a href="/readers" class="btn btn-outline glass-btn"><i class="fas fa-users"></i> Manage Patrons</a>
+        </div>
+    </div>
+</section>
+
+<!-- Quick Insights Grid -->
+<section class="section">
+    <h2 class="section-title">System Overview</h2>
+    <div class="stats-grid">
+        <div class="stat-card glass-card">
+            <div class="stat-icon text-blue">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <div class="stat-info">
+                <p>TOTAL ITEMS</p>
+                <h3>{{ stats.total_books }}</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-icon text-green">
+                <i class="fas fa-user-check"></i>
+            </div>
+            <div class="stat-info">
+                <p>ACTIVE PATRONS</p>
+                <h3>{{ stats.total_readers }}</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-icon text-purple">
+                <i class="fas fa-book-reader"></i>
+            </div>
+            <div class="stat-info">
+                <p>CURRENTLY BORROWED</p>
+                <h3>{{ stats.issued_books }}</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-icon text-teal">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-info">
+                <p>AVAILABLE</p>
+                <h3>{{ stats.available_books }}</h3>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Advanced Dashboard Layout -->
+<section class="section">
+    <div class="dashboard-grid layout-3-col">
+        <!-- System Actions -->
+        <div class="dashboard-card glass-card">
+            <h3><i class="fas fa-sliders-h"></i> Quick Actions</h3>
+            <ul class="action-list">
+                <li>
+                    <i class="fas fa-undo-alt text-primary"></i> 
+                    <a href="/returns" class="action-link">Process Returns</a>
+                </li>
+                <li>
+                    <i class="fas fa-user-plus text-primary"></i> 
+                    <a href="/readers" class="action-link">Register New Member</a>
+                </li>
+                <li>
+                    <i class="fas fa-shopping-bag text-primary"></i> 
+                    <a href="/bag" class="action-link">Checkout Bag</a>
+                </li>
+                <li>
+                    <i class="fas fa-chart-pie text-primary"></i> 
+                    <a href="/dashboard" class="action-link">Analytics Dashboard</a>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- System Seed -->
+        <div class="dashboard-card glass-card span-2">
+            <h3><i class="fas fa-database"></i> Database Management</h3>
+            <p class="text-muted mb-4">Initialize or reset the core system database. Administrative privileges required.</p>
+            <div class="seed-buttons">
+                <button onclick="seedData()" class="btn btn-success glass-btn"><i class="fas fa-cloud-download-alt"></i> Initialize Sample Data</button>
+                <button onclick="clearData()" class="btn btn-danger glass-btn"><i class="fas fa-trash-alt"></i> Purge Database</button>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function seedData() {
+    if (!confirm('INITIALIZE: Load sample books and readers into the system?')) return;
+    const res = await fetch('/api/seed', { method: 'POST' });
+    const data = await res.json();
+    showToast(data.message, data.success ? 'success' : 'warning');
+    if (data.success) setTimeout(() => location.reload(), 1000);
+}
+
+async function clearData() {
+    if (!confirm('WARNING: Are you sure? This will PURGE ALL DATA from the system!')) return;
+    const res = await fetch('/api/seed', { method: 'DELETE' });
+    const data = await res.json();
+    showToast(data.message, 'success');
+    setTimeout(() => location.reload(), 1000);
+}
+</script>
+{% endblock %}
