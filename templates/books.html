@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+{% block title %}Books - Library Management System{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="page-header-center">
+        <h1>Search for books</h1>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-row">
+        <input type="text" id="bookSearch" placeholder="Search" class="search-input">
+        <button class="btn btn-primary" onclick="searchBooks()">Search</button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="action-row">
+        <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-plus"></i> Add a book</button>
+    </div>
+
+    <!-- Book Count -->
+    <p class="book-count" id="bookCount"></p>
+
+    <!-- Books List -->
+    <div class="books-list" id="booksList">
+        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading books...</div>
+    </div>
+</section>
+
+<!-- Add/Edit Book Modal -->
+<div class="modal-overlay" id="bookModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle"><i class="fas fa-plus"></i> Add New Book</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="bookForm" onsubmit="saveBook(event)">
+            <input type="hidden" id="bookId">
+            <div class="form-group">
+                <label for="title">Book Title *</label>
+                <input type="text" id="title" required placeholder="Enter book title">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="author">Author *</label>
+                    <input type="text" id="author" required placeholder="Enter author name">
+                </div>
+                <div class="form-group">
+                    <label for="genre">Genre *</label>
+                    <input type="text" id="genre" required placeholder="e.g., Fiction, Science">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="isbn">ISBN *</label>
+                    <input type="text" id="isbn" required placeholder="Enter ISBN number">
+                </div>
+                <div class="form-group">
+                    <label for="totalCopies">Total Copies *</label>
+                    <input type="number" id="totalCopies" required min="1" placeholder="Number of copies">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Book</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- View Book Modal -->
+<div class="modal-overlay" id="viewModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2><i class="fas fa-book"></i> Book Details</h2>
+            <button class="modal-close" onclick="closeViewModal()">&times;</button>
+        </div>
+        <div id="viewBookContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allBooks = [];
+
+document.addEventListener('DOMContentLoaded', loadBooks);
+
+// Also search on Enter key
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('bookSearch').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') searchBooks();
+    });
+});
+
+async function loadBooks() {
+    const res = await fetch('/api/books');
+    allBooks = await res.json();
+    renderBooks(allBooks);
+}
+
+function searchBooks() {
+    const query = document.getElementById('bookSearch').value.toLowerCase();
+    if (!query) {
+        renderBooks(allBooks);
+        return;
+    }
+    const filtered = allBooks.filter(b =>
+        b.title.toLowerCase().includes(query) ||
+        b.author.toLowerCase().includes(query) ||
+        b.genre.toLowerCase().includes(query) ||
+        b.isbn.toLowerCase().includes(query)
+    );
+    renderBooks(filtered);
+}
+
+function renderBooks(books) {
+    const list = document.getElementById('booksList');
+    const countEl = document.getElementById('bookCount');
+    countEl.textContent = `${books.length} book${books.length !== 1 ? 's' : ''} available.`;
+
+    if (books.length === 0) {
+        list.innerHTML = '<div class="empty-state"><i class="fas fa-book-open"></i><p>No books found</p></div>';
+        return;
+    }
+    list.innerHTML = books.map((book, idx) => `
+        <div class="book-row ${idx % 2 === 1 ? 'book-row-alt' : ''}">
+            <div class="book-row-icon">
+                <i class="fas fa-book"></i>
+            </div>
+            <div class="book-row-info">
+                <strong class="book-row-title">${book.title}</strong>
+                <span class="book-row-meta">Written by ${book.author}</span>
+                <span class="book-row-meta">Genre: ${book.genre} &bull; ISBN: ${book.isbn}</span>
+                <span class="book-row-meta">${book.available_copies} / ${book.total_copies} copies available</span>
+            </div>
+            <div class="book-row-actions">
+                <button class="btn btn-primary btn-sm" onclick="addToBag(${book.id})" ${book.available_copies <= 0 ? 'disabled' : ''}>Add to bag</button>
+                <button class="btn btn-outline btn-sm" onclick="viewBook(${book.id})" title="View"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-warning btn-sm" onclick="editBook(${book.id})" title="Edit"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="deleteBook(${book.id})" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openAddModal() {
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus"></i> Add New Book';
+    document.getElementById('bookForm').reset();
+    document.getElementById('bookId').value = '';
+    document.getElementById('bookModal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('bookModal').classList.remove('active');
+}
+
+function closeViewModal() {
+    document.getElementById('viewModal').classList.remove('active');
+}
+
+async function viewBook(id) {
+    const res = await fetch(`/api/books/${id}`);
+    const book = await res.json();
+    document.getElementById('viewBookContent').innerHTML = `
+        <div class="view-details">
+            <div class="detail-row"><span class="detail-label">Title:</span><span>${book.title}</span></div>
+            <div class="detail-row"><span class="detail-label">Author:</span><span>${book.author}</span></div>
+            <div class="detail-row"><span class="detail-label">Genre:</span><span>${book.genre}</span></div>
+            <div class="detail-row"><span class="detail-label">ISBN:</span><span>${book.isbn}</span></div>
+            <div class="detail-row"><span class="detail-label">Total Copies:</span><span>${book.total_copies}</span></div>
+            <div class="detail-row"><span class="detail-label">Available:</span><span class="badge ${book.available_copies > 0 ? 'badge-success' : 'badge-danger'}">${book.available_copies}</span></div>
+            <div class="detail-row"><span class="detail-label">Date Added:</span><span>${book.date_added}</span></div>
+        </div>
+    `;
+    document.getElementById('viewModal').classList.add('active');
+}
+
+async function editBook(id) {
+    const res = await fetch(`/api/books/${id}`);
+    const book = await res.json();
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Book';
+    document.getElementById('bookId').value = book.id;
+    document.getElementById('title').value = book.title;
+    document.getElementById('author').value = book.author;
+    document.getElementById('genre').value = book.genre;
+    document.getElementById('isbn').value = book.isbn;
+    document.getElementById('totalCopies').value = book.total_copies;
+    document.getElementById('bookModal').classList.add('active');
+}
+
+async function saveBook(e) {
+    e.preventDefault();
+    const id = document.getElementById('bookId').value;
+    const data = {
+        title: document.getElementById('title').value,
+        author: document.getElementById('author').value,
+        genre: document.getElementById('genre').value,
+        isbn: document.getElementById('isbn').value,
+        total_copies: parseInt(document.getElementById('totalCopies').value)
+    };
+    const url = id ? `/api/books/${id}` : '/api/books';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+        method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+        showToast(id ? 'Book updated!' : 'Book added!', 'success');
+        closeModal();
+        loadBooks();
+    } else {
+        showToast(result.message || 'Error saving book', 'error');
+    }
+}
+
+async function deleteBook(id) {
+    if (!confirm('Delete this book?')) return;
+    const res = await fetch(`/api/books/${id}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (result.success) {
+        showToast('Book deleted', 'success');
+        loadBooks();
+    } else {
+        showToast(result.message, 'error');
+    }
+}
+
+async function addToBag(id) {
+    const res = await fetch(`/api/bag/add/${id}`, { method: 'POST' });
+    const result = await res.json();
+    showToast(result.message, result.success ? 'success' : 'warning');
+    updateBagCount(result.count);
+}
+</script>
+{% endblock %}
