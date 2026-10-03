@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard - Library Management System{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="page-header">
+        <h1><i class="fas fa-chart-bar"></i> Dashboard</h1>
+        <button class="btn btn-outline" onclick="loadDashboard()"><i class="fas fa-sync"></i> Refresh</button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Genre Distribution -->
+        <div class="dashboard-card">
+            <h3><i class="fas fa-chart-pie"></i> Books by Genre</h3>
+            <div id="genreChart" class="chart-container"></div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="dashboard-card">
+            <h3><i class="fas fa-history"></i> Recent Transactions</h3>
+            <div id="recentTransactions" class="recent-list"></div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadDashboard);
+
+async function loadDashboard() {
+    const res = await fetch('/api/dashboard');
+    const stats = await res.json();
+    renderStats(stats);
+    renderGenreChart(stats.genre_distribution);
+    renderRecentTransactions(stats.recent_transactions);
+}
+
+function renderStats(stats) {
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-icon" style="background: var(--primary-light);">
+                <i class="fas fa-layer-group" style="color: var(--primary);"></i>
+            </div>
+            <div class="stat-info">
+                <h3>${stats.total_titles}</h3>
+                <p>Book Titles</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #e8f5e9;">
+                <i class="fas fa-book" style="color: #28a745;"></i>
+            </div>
+            <div class="stat-info">
+                <h3>${stats.total_books}</h3>
+                <p>Total Copies</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #d4edda;">
+                <i class="fas fa-check-circle" style="color: #28a745;"></i>
+            </div>
+            <div class="stat-info">
+                <h3>${stats.available_books}</h3>
+                <p>Available</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #fff3cd;">
+                <i class="fas fa-hand-holding" style="color: #e67e22;"></i>
+            </div>
+            <div class="stat-info">
+                <h3>${stats.issued_books}</h3>
+                <p>Issued</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #d1ecf1;">
+                <i class="fas fa-users" style="color: #17a2b8;"></i>
+            </div>
+            <div class="stat-info">
+                <h3>${stats.total_readers}</h3>
+                <p>Readers</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderGenreChart(genreData) {
+    const container = document.getElementById('genreChart');
+    const genres = Object.keys(genreData);
+    if (genres.length === 0) {
+        container.innerHTML = '<p class="text-muted">No data available</p>';
+        return;
+    }
+    const maxVal = Math.max(...Object.values(genreData));
+    const colors = ['#4361ee', '#3a0ca3', '#7209b7', '#f72585', '#4cc9f0', '#06d6a0', '#ffd166', '#ef476f'];
+    container.innerHTML = genres.map((genre, i) => {
+        const pct = (genreData[genre] / maxVal) * 100;
+        return `
+            <div class="chart-bar-row">
+                <span class="chart-label">${genre}</span>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill" style="width: ${pct}%; background: ${colors[i % colors.length]};">
+                        ${genreData[genre]}
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function renderRecentTransactions(transactions) {
+    const container = document.getElementById('recentTransactions');
+    if (transactions.length === 0) {
+        container.innerHTML = '<p class="text-muted">No recent transactions</p>';
+        return;
+    }
+    container.innerHTML = transactions.map(t => `
+        <div class="recent-item">
+            <div class="recent-icon ${t.status === 'issued' ? 'issued' : 'returned'}">
+                <i class="fas ${t.status === 'issued' ? 'fa-arrow-right' : 'fa-arrow-left'}"></i>
+            </div>
+            <div class="recent-info">
+                <strong>${t.book_title}</strong>
+                <span>${t.status === 'issued' ? 'Issued to' : 'Returned by'} ${t.reader_name}</span>
+            </div>
+            <span class="recent-date">${t.status === 'issued' ? t.issue_date : t.return_date}</span>
+        </div>
+    `).join('');
+}
+</script>
+{% endblock %}
