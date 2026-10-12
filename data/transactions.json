@@ -16,8 +16,8 @@
         "book_id": 2,
         "book_title": "The Great Gatsby",
         "issue_date": "2026-09-30",
-        "return_date": null,
-        "status": "issued"
+        "return_date": "2026-10-04",
+        "status": "returned"
     },
     {
         "id": 3,
@@ -26,8 +26,11 @@
         "book_id": 3,
         "book_title": "Data Structures Using C",
         "issue_date": "2026-09-30",
-        "return_date": null,
-        "status": "issued"
+        "return_date": "2026-10-12",
+        "status": "returned",
+        "overdue_days": 0,
+        "penalty_amount": 0,
+        "penalty_paid": false
     },
     {
         "id": 4,
@@ -58,5 +61,53 @@
         "issue_date": "2026-10-03",
         "return_date": "2026-10-03",
         "status": "returned"
+    },
+    {
+        "id": 7,
+        "reader_id": 4,
+        "reader_name": "Sneha Reddy",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-10-04",
+        "return_date": "2026-10-04",
+        "status": "returned"
+    },
+    {
+        "id": 8,
+        "reader_id": 3,
+        "reader_name": "Rohan Gupta",
+        "book_id": 3,
+        "book_title": "Data Structures Using C",
+        "issue_date": "2026-10-04",
+        "return_date": "2026-10-04",
+        "status": "returned"
+    },
+    {
+        "id": 9,
+        "reader_id": 1,
+        "reader_name": "Aarav Sharma",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-10-12",
+        "due_date": "2026-10-07T17:47",
+        "return_date": "2026-10-12",
+        "status": "returned",
+        "overdue_days": 5,
+        "penalty_amount": 50,
+        "penalty_paid": true
+    },
+    {
+        "id": 10,
+        "reader_id": 1,
+        "reader_name": "Aarav Sharma",
+        "book_id": 1,
+        "book_title": "To Kill a Mockingbird",
+        "issue_date": "2026-10-12",
+        "due_date": "2026-10-26T17:00",
+        "return_date": null,
+        "status": "issued",
+        "overdue_days": 0,
+        "penalty_amount": 0,
+        "penalty_paid": false
     }
 ]
