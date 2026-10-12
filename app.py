@@ -10,10 +10,64 @@ A college mini-project demonstrating Python concepts:
 from flask import Flask, render_template, request, jsonify, session
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = 'library_secret_key_2024'
+
+# ============================================================
+# PENALTY CONFIGURATION - Configurable fine rate
+# ============================================================
+PENALTY_RATE_PER_DAY = 10  # Penalty in Rupees per overdue day
+
+
+def parse_iso_datetime(dt_str):
+    """Parse various ISO and standard date formats."""
+    if not dt_str:
+        return None
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def calculate_penalty(due_date_str, return_date_str=None):
+    """Calculate overdue days and penalty amount.
+    Returns a dictionary with overdue_days, penalty_amount, and is_overdue."""
+    due_date = parse_iso_datetime(due_date_str)
+    if not due_date:
+        return {
+            'overdue_days': 0,
+            'penalty_amount': 0,
+            'is_overdue': False,
+            'penalty_rate': PENALTY_RATE_PER_DAY
+        }
+    
+    if return_date_str:
+        return_date = parse_iso_datetime(return_date_str) or datetime.now()
+    else:
+        return_date = datetime.now()
+    
+    diff = return_date - due_date
+    if diff.total_seconds() > 0:
+        day_diff = (return_date.date() - due_date.date()).days
+        if day_diff > 0:
+            overdue_days = day_diff
+        else:
+            overdue_days = 1  # Overdue on same day past the due hour
+    else:
+        overdue_days = 0
+    
+    penalty_amount = overdue_days * PENALTY_RATE_PER_DAY
+    
+    return {
+        'overdue_days': overdue_days,
+        'penalty_amount': penalty_amount,
+        'is_overdue': overdue_days > 0,
+        'penalty_rate': PENALTY_RATE_PER_DAY
+    }
 
 # ============================================================
 # FILE PATHS - JSON files for persistent storage
@@ -221,7 +275,7 @@ def get_all_transactions():
     return transactions_list
 
 
-def issue_books(reader_id, book_ids_list):
+def issue_books(reader_id, book_ids_list, due_date=None):
     """Issue multiple books to a reader. Uses list of book IDs."""
     transactions_list = get_all_transactions()
     books_list = get_all_books()
@@ -229,6 +283,9 @@ def issue_books(reader_id, book_ids_list):
     
     if reader is None:
         return {'success': False, 'message': 'Reader not found'}
+    
+    if not due_date:
+        return {'success': False, 'message': 'Return due date is required'}
     
     issued = []  # List to track issued books
     errors = []  # List to track errors
@@ -255,7 +312,7 @@ def issue_books(reader_id, book_ids_list):
             errors.append(f'"{book["title"]}" already issued to this reader')
             continue
         
-        # Create transaction dictionary
+        # Create transaction dictionary with due date and penalty fields
         new_transaction = {
             'id': generate_id(transactions_list),
             'reader_id': reader_id,
@@ -263,8 +320,12 @@ def issue_books(reader_id, book_ids_list):
             'book_id': book_id,
             'book_title': book['title'],
             'issue_date': datetime.now().strftime('%Y-%m-%d'),
+            'due_date': due_date,
             'return_date': None,
-            'status': 'issued'
+            'status': 'issued',
+            'overdue_days': 0,
+            'penalty_amount': 0,
+            'penalty_paid': False
         }
         transactions_list.append(new_transaction)
         
@@ -287,7 +348,7 @@ def issue_books(reader_id, book_ids_list):
 
 
 def return_book(transaction_id):
-    """Return a book by updating the transaction status."""
+    """Return a book by updating the transaction status and calculating penalty."""
     transactions_list = get_all_transactions()
     books_list = get_all_books()
     
@@ -299,6 +360,18 @@ def return_book(transaction_id):
             transactions_list[i]['status'] = 'returned'
             transactions_list[i]['return_date'] = datetime.now().strftime('%Y-%m-%d')
             
+            # Calculate penalty if due_date exists
+            due_date = transactions_list[i].get('due_date', None)
+            if due_date:
+                penalty_info = calculate_penalty(due_date, transactions_list[i]['return_date'])
+                transactions_list[i]['overdue_days'] = penalty_info['overdue_days']
+                transactions_list[i]['penalty_amount'] = penalty_info['penalty_amount']
+                transactions_list[i]['penalty_paid'] = False
+            else:
+                transactions_list[i]['overdue_days'] = 0
+                transactions_list[i]['penalty_amount'] = 0
+                transactions_list[i]['penalty_paid'] = False
+            
             # Increase available copies
             book_id = transactions_list[i]['book_id']
             for j in range(len(books_list)):
@@ -308,7 +381,13 @@ def return_book(transaction_id):
             
             save_json_file(TRANSACTIONS_FILE, transactions_list)
             save_json_file(BOOKS_FILE, books_list)
-            return {'success': True, 'message': 'Book returned successfully'}
+            
+            result = {'success': True, 'message': 'Book returned successfully'}
+            if transactions_list[i]['penalty_amount'] > 0:
+                result['message'] += f'. OVERDUE by {transactions_list[i]["overdue_days"]} day(s). Fine: Rs.{transactions_list[i]["penalty_amount"]}'
+                result['penalty'] = transactions_list[i]['penalty_amount']
+                result['overdue_days'] = transactions_list[i]['overdue_days']
+            return result
     
     return {'success': False, 'message': 'Transaction not found'}
 
@@ -606,14 +685,18 @@ def api_checkout():
     """API to checkout - issue all books in bag to a reader."""
     data = request.json
     reader_id = data.get('reader_id')
+    due_date = data.get('due_date')
+    
     if not reader_id:
         return jsonify({'success': False, 'message': 'Please select a reader'})
+    if not due_date:
+        return jsonify({'success': False, 'message': 'Please select a return due date'})
     
     bag = get_bag()
     if len(bag) == 0:
         return jsonify({'success': False, 'message': 'Bag is empty'})
     
-    result = issue_books(reader_id, bag)
+    result = issue_books(reader_id, bag, due_date)
     if result['success']:
         clear_bag()
     return jsonify(result)
@@ -624,17 +707,31 @@ def api_checkout():
 # ============================================================
 @app.route('/api/transactions', methods=['GET'])
 def api_get_transactions():
-    """API to get all transactions."""
+    """API to get all transactions with real-time penalty calculations."""
     status_filter = request.args.get('status', '')
     reader_id = request.args.get('reader_id', '')
     transactions = get_all_transactions()
     
-    if status_filter:
-        transactions = [t for t in transactions if t['status'] == status_filter]
-    if reader_id:
-        transactions = [t for t in transactions if t['reader_id'] == int(reader_id)]
+    enriched = []
+    for t in transactions:
+        t_copy = dict(t)
+        if t.get('status') == 'issued' and t.get('due_date'):
+            penalty_info = calculate_penalty(t['due_date'])
+            t_copy['current_overdue_days'] = penalty_info['overdue_days']
+            t_copy['current_penalty'] = penalty_info['penalty_amount']
+            t_copy['is_overdue'] = penalty_info['is_overdue']
+        else:
+            t_copy['current_overdue_days'] = t.get('overdue_days', 0)
+            t_copy['current_penalty'] = t.get('penalty_amount', 0)
+            t_copy['is_overdue'] = t.get('overdue_days', 0) > 0
+        enriched.append(t_copy)
     
-    return jsonify(transactions)
+    if status_filter:
+        enriched = [t for t in enriched if t['status'] == status_filter]
+    if reader_id:
+        enriched = [t for t in enriched if t['reader_id'] == int(reader_id)]
+    
+    return jsonify(enriched)
 
 
 @app.route('/api/transactions/return/<int:txn_id>', methods=['POST'])
@@ -642,6 +739,34 @@ def api_return_book(txn_id):
     """API to return a book."""
     result = return_book(txn_id)
     return jsonify(result)
+
+
+@app.route('/api/transactions/pay/<int:txn_id>', methods=['POST'])
+def api_pay_penalty(txn_id):
+    """API to mark a penalty as paid."""
+    transactions_list = get_all_transactions()
+    for i in range(len(transactions_list)):
+        if transactions_list[i]['id'] == txn_id:
+            transactions_list[i]['penalty_paid'] = True
+            save_json_file(TRANSACTIONS_FILE, transactions_list)
+            return jsonify({'success': True, 'message': 'Penalty marked as paid successfully'})
+    return jsonify({'success': False, 'message': 'Transaction not found'})
+
+
+@app.route('/api/penalty-rate', methods=['GET', 'POST'])
+def api_penalty_rate():
+    """API to get or update the configurable penalty rate."""
+    global PENALTY_RATE_PER_DAY
+    if request.method == 'POST':
+        data = request.json or {}
+        new_rate = data.get('rate')
+        if new_rate is not None:
+            try:
+                PENALTY_RATE_PER_DAY = max(0, int(new_rate))
+                return jsonify({'success': True, 'rate': PENALTY_RATE_PER_DAY, 'message': f'Penalty rate updated to Rs.{PENALTY_RATE_PER_DAY}/day'})
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'message': 'Invalid rate value'}), 400
+    return jsonify({'rate': PENALTY_RATE_PER_DAY})
 
 
 # ============================================================
