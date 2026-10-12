@@ -1,27 +1,81 @@
 {% extends 'base.html' %}
-{% block title %}Returns - Library Management System{% endblock %}
+{% block title %}Returns & Penalties - Library Management System{% endblock %}
 
 {% block content %}
 <section class="section">
     <div class="page-header">
-        <h1><i class="fas fa-undo"></i> Book Returns</h1>
+        <h1><i class="fas fa-undo"></i> Book Returns & Penalties</h1>
+        <div class="penalty-rate-badge" id="rateBadge">
+            <i class="fas fa-gavel"></i> Penalty Rate: <strong>₹<span id="headerPenaltyRate">10</span></strong> / day
+            <button class="btn btn-sm btn-outline" onclick="openRateModal()" style="margin-left: 10px; padding: 4px 10px;">
+                <i class="fas fa-cog"></i> Edit Rate
+            </button>
+        </div>
     </div>
 
-    <!-- Filter -->
+    <!-- Filter Bar -->
     <div class="filter-bar">
         <div class="filter-group">
-            <label>Filter by Reader:</label>
+            <label><i class="fas fa-user"></i> Filter by Reader:</label>
             <select id="readerFilter" onchange="loadTransactions()">
                 <option value="">All Readers</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>Status:</label>
+            <label><i class="fas fa-tasks"></i> Status:</label>
             <select id="statusFilter" onchange="loadTransactions()">
-                <option value="issued">Currently Issued</option>
                 <option value="">All Transactions</option>
+                <option value="issued" selected>Currently Issued</option>
                 <option value="returned">Returned</option>
             </select>
+        </div>
+        <div class="filter-group">
+            <label><i class="fas fa-money-bill-wave"></i> Fine Filter:</label>
+            <select id="fineFilter" onchange="loadTransactions()">
+                <option value="">All</option>
+                <option value="unpaid">Unpaid Fines Only</option>
+                <option value="overdue">Overdue Items Only</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Summary Stats Row -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stat-card glass-card" style="padding: 16px 20px;">
+            <div class="stat-icon text-blue" style="width: 44px; height: 44px; font-size: 1.2rem;">
+                <i class="fas fa-book-reader"></i>
+            </div>
+            <div class="stat-info">
+                <p>CURRENTLY ISSUED</p>
+                <h3 id="statIssuedCount">0</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card" style="padding: 16px 20px;">
+            <div class="stat-icon text-warning" style="width: 44px; height: 44px; font-size: 1.2rem; color: #f59e0b;">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-info">
+                <p>OVERDUE BOOKS</p>
+                <h3 id="statOverdueCount" style="color: #ef4444;">0</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card" style="padding: 16px 20px;">
+            <div class="stat-icon text-danger" style="width: 44px; height: 44px; font-size: 1.2rem; color: #ef4444;">
+                <i class="fas fa-exclamation-circle"></i>
+            </div>
+            <div class="stat-info">
+                <p>UNPAID FINES</p>
+                <h3 id="statUnpaidFineTotal" style="color: #ef4444;">₹0</h3>
+            </div>
+        </div>
+        <div class="stat-card glass-card" style="padding: 16px 20px;">
+            <div class="stat-icon text-green" style="width: 44px; height: 44px; font-size: 1.2rem; color: #10b981;">
+                <i class="fas fa-check-double"></i>
+            </div>
+            <div class="stat-info">
+                <p>RETURNED BOOKS</p>
+                <h3 id="statReturnedCount">0</h3>
+            </div>
         </div>
     </div>
 
@@ -34,74 +88,311 @@
                     <th>Book</th>
                     <th>Reader</th>
                     <th>Issue Date</th>
+                    <th>Due Date & Time</th>
                     <th>Return Date</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>Overdue Days</th>
+                    <th>Total Fine</th>
+                    <th>Payment Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="transactionsBody">
-                <tr><td colspan="7" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                <tr><td colspan="10" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading transactions...</td></tr>
             </tbody>
         </table>
     </div>
 </section>
+
+<!-- Return Details Modal -->
+<div class="modal-overlay" id="detailsModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2><i class="fas fa-file-invoice"></i> Book Return Details</h2>
+            <button class="modal-close" onclick="closeDetailsModal()">&times;</button>
+        </div>
+        <div id="detailsModalContent" class="view-details"></div>
+    </div>
+</div>
+
+<!-- Config Penalty Rate Modal -->
+<div class="modal-overlay" id="rateModal">
+    <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+            <h2><i class="fas fa-cog"></i> Configure Penalty Rate</h2>
+            <button class="modal-close" onclick="closeRateModal()">&times;</button>
+        </div>
+        <form onsubmit="savePenaltyRate(event)">
+            <div class="form-group">
+                <label for="newPenaltyRate">Penalty Rate (₹ per overdue day):</label>
+                <input type="number" id="newPenaltyRate" min="0" max="1000" step="1" required>
+                <p class="text-muted" style="font-size: 0.85rem; margin-top: 6px;">
+                    Default is ₹10/day. All overdue calculations will automatically use this rate.
+                </p>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" onclick="closeRateModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Update Rate</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+let allTransactions = [];
+let currentPenaltyRate = 10;
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadPenaltyRate();
     loadReaderOptions();
     loadTransactions();
 });
+
+async function loadPenaltyRate() {
+    try {
+        const res = await fetch('/api/penalty-rate');
+        const data = await res.json();
+        currentPenaltyRate = data.rate;
+        document.getElementById('headerPenaltyRate').textContent = currentPenaltyRate;
+        document.getElementById('newPenaltyRate').value = currentPenaltyRate;
+    } catch(e) {}
+}
+
+function openRateModal() {
+    document.getElementById('newPenaltyRate').value = currentPenaltyRate;
+    document.getElementById('rateModal').classList.add('active');
+}
+
+function closeRateModal() {
+    document.getElementById('rateModal').classList.remove('active');
+}
+
+async function savePenaltyRate(e) {
+    e.preventDefault();
+    const rate = parseInt(document.getElementById('newPenaltyRate').value);
+    const res = await fetch('/api/penalty-rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rate: rate })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(data.message, 'success');
+        closeRateModal();
+        loadPenaltyRate();
+        loadTransactions();
+    } else {
+        showToast(data.message || 'Error updating rate', 'error');
+    }
+}
 
 async function loadReaderOptions() {
     const res = await fetch('/api/readers');
     const readers = await res.json();
     const select = document.getElementById('readerFilter');
     readers.forEach(r => {
-        select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
+        select.innerHTML += `<option value="${r.id}">${r.name} (#${r.id})</option>`;
     });
+}
+
+function formatDateTimeDisplay(dtStr) {
+    if (!dtStr) return '-';
+    try {
+        const dt = new Date(dtStr);
+        if (isNaN(dt.getTime())) return dtStr;
+        return dt.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch(e) {
+        return dtStr;
+    }
 }
 
 async function loadTransactions() {
     const status = document.getElementById('statusFilter').value;
     const readerId = document.getElementById('readerFilter').value;
+    const fineFilter = document.getElementById('fineFilter').value;
+
     let url = '/api/transactions?';
     if (status) url += `status=${status}&`;
     if (readerId) url += `reader_id=${readerId}&`;
-    
+
     const res = await fetch(url);
-    const transactions = await res.json();
-    renderTransactions(transactions);
+    allTransactions = await res.json();
+
+    // Compute summary stats
+    let issuedCount = 0;
+    let overdueCount = 0;
+    let unpaidFineTotal = 0;
+    let returnedCount = 0;
+
+    allTransactions.forEach(t => {
+        if (t.status === 'issued') {
+            issuedCount++;
+            if (t.is_overdue || (t.current_overdue_days > 0)) {
+                overdueCount++;
+            }
+        } else if (t.status === 'returned') {
+            returnedCount++;
+        }
+        const penalty = t.penalty_amount || t.current_penalty || 0;
+        if (penalty > 0 && !t.penalty_paid) {
+            unpaidFineTotal += penalty;
+        }
+    });
+
+    document.getElementById('statIssuedCount').textContent = issuedCount;
+    document.getElementById('statOverdueCount').textContent = overdueCount;
+    document.getElementById('statUnpaidFineTotal').textContent = `₹${unpaidFineTotal}`;
+    document.getElementById('statReturnedCount').textContent = returnedCount;
+
+    // Filter by fineFilter if selected
+    let filtered = allTransactions;
+    if (fineFilter === 'unpaid') {
+        filtered = filtered.filter(t => {
+            const fine = t.penalty_amount || t.current_penalty || 0;
+            return fine > 0 && !t.penalty_paid;
+        });
+    } else if (fineFilter === 'overdue') {
+        filtered = filtered.filter(t => (t.current_overdue_days > 0) || (t.overdue_days > 0));
+    }
+
+    renderTransactions(filtered);
 }
 
 function renderTransactions(transactions) {
     const tbody = document.getElementById('transactionsBody');
     if (transactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-check-circle"></i> No transactions found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-check-circle"></i> No transactions found</td></tr>';
         return;
     }
-    tbody.innerHTML = transactions.map(t => `
-        <tr>
-            <td><strong>#${t.id}</strong></td>
-            <td>${t.book_title}</td>
-            <td>${t.reader_name}</td>
-            <td>${t.issue_date}</td>
-            <td>${t.return_date || '-'}</td>
-            <td><span class="badge ${t.status === 'issued' ? 'badge-warning' : 'badge-success'}">${t.status}</span></td>
-            <td>
-                ${t.status === 'issued' 
-                    ? `<button class="btn btn-sm btn-primary" onclick="returnBook(${t.id})"><i class="fas fa-undo"></i> Return</button>`
-                    : '<span class="text-muted">Completed</span>'
-                }
-            </td>
-        </tr>
-    `).join('');
+
+    tbody.innerHTML = transactions.map(t => {
+        const isIssued = t.status === 'issued';
+        const overdueDays = isIssued ? (t.current_overdue_days || 0) : (t.overdue_days || 0);
+        const fineAmount = isIssued ? (t.current_penalty || 0) : (t.penalty_amount || 0);
+        const isPaid = !!t.penalty_paid;
+
+        // Payment status badge
+        let paymentBadge = '';
+        if (fineAmount > 0) {
+            if (isPaid) {
+                paymentBadge = '<span class="badge badge-success"><i class="fas fa-check"></i> Paid</span>';
+            } else {
+                paymentBadge = '<span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> Unpaid</span>';
+            }
+        } else {
+            paymentBadge = '<span class="badge" style="background: rgba(0,0,0,0.05); color: var(--text-muted);"><i class="fas fa-check"></i> No Fine</span>';
+        }
+
+        // Overdue days display
+        let overdueBadge = '';
+        if (overdueDays > 0) {
+            overdueBadge = `<span class="badge badge-danger" style="font-weight: 700;">${overdueDays} day${overdueDays > 1 ? 's' : ''} overdue</span>`;
+        } else {
+            overdueBadge = '<span class="badge badge-success">On Time</span>';
+        }
+
+        // Fine display
+        let fineDisplay = fineAmount > 0 
+            ? `<strong style="color: #ef4444;">₹${fineAmount}</strong>` 
+            : '<span class="text-muted">₹0</span>';
+
+        return `
+            <tr>
+                <td><strong>#${t.id}</strong></td>
+                <td>
+                    <strong>${t.book_title}</strong>
+                    <button class="btn btn-sm btn-outline" style="padding: 2px 6px; font-size: 0.75rem; margin-left: 6px;" onclick="viewDetails(${t.id})" title="View Details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+                <td>${t.reader_name}</td>
+                <td>${t.issue_date}</td>
+                <td>${formatDateTimeDisplay(t.due_date)}</td>
+                <td>${t.return_date || '<span class="badge badge-warning">Not Returned</span>'}</td>
+                <td>${overdueBadge}</td>
+                <td>${fineDisplay}</td>
+                <td>${paymentBadge}</td>
+                <td>
+                    <div class="table-actions" style="gap: 6px;">
+                        ${isIssued 
+                            ? `<button class="btn btn-sm btn-primary" onclick="returnBook(${t.id})"><i class="fas fa-undo"></i> Return</button>`
+                            : ''
+                        }
+                        ${(fineAmount > 0 && !isPaid)
+                            ? `<button class="btn btn-sm btn-success" onclick="markPenaltyPaid(${t.id})"><i class="fas fa-receipt"></i> Mark Paid</button>`
+                            : ''
+                        }
+                        ${(!isIssued && (fineAmount === 0 || isPaid))
+                            ? '<span class="text-muted" style="font-size: 0.85rem;"><i class="fas fa-check-circle" style="color: #10b981;"></i> Completed</span>'
+                            : ''
+                        }
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function viewDetails(id) {
+    const t = allTransactions.find(item => item.id === id);
+    if (!t) return;
+
+    const isIssued = t.status === 'issued';
+    const overdueDays = isIssued ? (t.current_overdue_days || 0) : (t.overdue_days || 0);
+    const fineAmount = isIssued ? (t.current_penalty || 0) : (t.penalty_amount || 0);
+    const isPaid = !!t.penalty_paid;
+
+    const content = `
+        <div class="detail-row"><span class="detail-label">Transaction ID:</span><span><strong>#${t.id}</strong></span></div>
+        <div class="detail-row"><span class="detail-label">Book Title:</span><span>${t.book_title} (ID #${t.book_id})</span></div>
+        <div class="detail-row"><span class="detail-label">Reader Name:</span><span>${t.reader_name} (ID #${t.reader_id})</span></div>
+        <div class="detail-row"><span class="detail-label">Issue Date:</span><span>${t.issue_date}</span></div>
+        <div class="detail-row"><span class="detail-label">Return Due Date & Time:</span><span><strong>${formatDateTimeDisplay(t.due_date)}</strong></span></div>
+        <div class="detail-row"><span class="detail-label">Actual Return Date:</span><span>${t.return_date || '<span class="badge badge-warning">Currently Issued</span>'}</span></div>
+        <div class="detail-row"><span class="detail-label">Current Status:</span><span><span class="badge ${isIssued ? 'badge-warning' : 'badge-success'}">${t.status.toUpperCase()}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Penalty Rate:</span><span>₹${currentPenaltyRate} per day</span></div>
+        <div class="detail-row"><span class="detail-label">Overdue Days:</span><span style="font-weight: 700; color: ${overdueDays > 0 ? '#ef4444' : '#10b981'};">${overdueDays} day(s)</span></div>
+        <div class="detail-row"><span class="detail-label">Total Fine:</span><span style="font-size: 1.2rem; font-weight: 800; color: ${fineAmount > 0 ? '#ef4444' : '#10b981'};">₹${fineAmount}</span></div>
+        <div class="detail-row"><span class="detail-label">Payment Status:</span><span>${
+            fineAmount > 0 
+                ? (isPaid ? '<span class="badge badge-success">PAID</span>' : '<span class="badge badge-danger">UNPAID</span>') 
+                : '<span class="badge badge-success">NO FINE DUE</span>'
+        }</span></div>
+        ${fineAmount > 0 && !isPaid ? `
+            <div style="margin-top: 20px; text-align: right;">
+                <button class="btn btn-success" onclick="markPenaltyPaid(${t.id}); closeDetailsModal();">
+                    <i class="fas fa-check"></i> Collect / Mark Fine as Paid
+                </button>
+            </div>
+        ` : ''}
+    `;
+
+    document.getElementById('detailsModalContent').innerHTML = content;
+    document.getElementById('detailsModal').classList.add('active');
+}
+
+function closeDetailsModal() {
+    document.getElementById('detailsModal').classList.remove('active');
 }
 
 async function returnBook(id) {
-    if (!confirm('Confirm return of this book?')) return;
+    if (!confirm('Confirm return of this book? Penalty will be calculated automatically if overdue.')) return;
     const res = await fetch(`/api/transactions/return/${id}`, { method: 'POST' });
+    const result = await res.json();
+    showToast(result.message, result.success ? 'success' : 'error');
+    loadTransactions();
+}
+
+async function markPenaltyPaid(id) {
+    if (!confirm('Confirm that the penalty has been paid by the reader?')) return;
+    const res = await fetch(`/api/transactions/pay/${id}`, { method: 'POST' });
     const result = await res.json();
     showToast(result.message, result.success ? 'success' : 'error');
     loadTransactions();
