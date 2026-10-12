@@ -22,27 +22,56 @@
                     <div class="checkout-field">
                         <label>Reader ID :</label>
                         <div class="checkout-field-input">
-                            <select id="checkoutReader">
+                            <select id="checkoutReader" onchange="onReaderSelected()">
                                 <option value="">-- Select a Reader --</option>
                             </select>
                         </div>
                     </div>
                     <div class="checkout-field" id="readerNameField">
                         <label>Name :</label>
-                        <span class="checkout-field-value" id="readerNameDisplay"></span>
+                        <span class="checkout-field-value" id="readerNameDisplay">-</span>
                     </div>
                     <div class="checkout-field" id="readerContactField">
                         <label>Contact :</label>
-                        <span class="checkout-field-value" id="readerContactDisplay"></span>
+                        <span class="checkout-field-value" id="readerContactDisplay">-</span>
                     </div>
                     <div class="checkout-field">
                         <label>Issue Date :</label>
                         <span class="checkout-field-value" id="issueDateDisplay"></span>
                     </div>
+                    <div class="checkout-field">
+                        <label>Return Due Date & Time :</label>
+                        <div class="checkout-field-input">
+                            <input type="datetime-local" id="dueDateInput" required onchange="calculatePenaltyPreview()">
+                        </div>
+                    </div>
+                    <div class="checkout-field">
+                        <label>Penalty Charges :</label>
+                        <div class="checkout-field-input" style="display: flex; align-items: center; gap: 8px;">
+                            <span>₹</span>
+                            <input type="number" id="penaltyRateInput" min="0" max="1000" value="10" style="width: 75px; padding: 6px 10px; font-weight: 600;" onchange="updatePenaltyRateFromBag()">
+                            <span class="text-muted" style="font-size: 0.85rem;">/ day (Configurable)</span>
+                        </div>
+                    </div>
+                    <div class="checkout-field">
+                        <label>Overdue Days :</label>
+                        <span class="checkout-field-value" id="checkoutOverdueDays">0 days</span>
+                    </div>
+                    <div class="checkout-field">
+                        <label>Total Fine :</label>
+                        <span class="checkout-field-value" id="checkoutTotalFine" style="font-weight: 700; color: #10b981;">₹0</span>
+                    </div>
+                    <div class="checkout-field">
+                        <label>Payment Status :</label>
+                        <span class="checkout-field-value" id="checkoutPaymentStatus">
+                            <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">No Fine Due</span>
+                        </span>
+                    </div>
                 </div>
 
-                <button class="btn btn-success btn-block checkout-btn" onclick="checkout()">
-                    <i class="fas fa-check"></i> Issue Books
+                <!-- Issue Book Button (replaces any back button) -->
+                <button class="btn btn-primary btn-block checkout-btn" id="issueBookBtn" onclick="checkout()">
+                    <i class="fas fa-book-reader"></i> Issue Book
                 </button>
             </div>
 
@@ -53,6 +82,7 @@
                     <li>Readers are requested to handle all Library property carefully to avoid damage to it and also not to disturb other readers/users.</li>
                     <li>No Library material can be taken out of the Library without permission of the Librarian.</li>
                     <li>Four books are issued for maximum of two weeks and they must be returned on or before the due date specified above.</li>
+                    <li><strong>Late return penalty: ₹<span class="penalty-rate-inline">10</span> per overdue day will be automatically charged if returned after the due date.</strong></li>
                 </ul>
             </div>
         </div>
@@ -62,10 +92,15 @@
 
 {% block scripts %}
 <script>
+let currentBag = [];
+let currentPenaltyRate = 10;
+
 document.addEventListener('DOMContentLoaded', () => {
     loadBag();
     loadReaders();
     setIssueDate();
+    setDefaultDueDate();
+    loadPenaltyRate();
 });
 
 function setIssueDate() {
@@ -74,9 +109,91 @@ function setIssueDate() {
     document.getElementById('issueDateDisplay').textContent = now.toLocaleDateString('en-US', options);
 }
 
+function setDefaultDueDate() {
+    // Default due date: 14 days from now at 5:00 PM
+    const due = new Date();
+    due.setDate(due.getDate() + 14);
+    due.setHours(17, 0, 0, 0);
+    const year = due.getFullYear();
+    const month = String(due.getMonth() + 1).padStart(2, '0');
+    const day = String(due.getDate()).padStart(2, '0');
+    const hours = String(due.getHours()).padStart(2, '0');
+    const mins = String(due.getMinutes()).padStart(2, '0');
+    document.getElementById('dueDateInput').value = `${year}-${month}-${day}T${hours}:${mins}`;
+
+    calculatePenaltyPreview();
+}
+
+async function loadPenaltyRate() {
+    try {
+        const res = await fetch('/api/penalty-rate');
+        const data = await res.json();
+        currentPenaltyRate = data.rate;
+        document.getElementById('penaltyRateInput').value = currentPenaltyRate;
+        document.querySelectorAll('.penalty-rate-inline').forEach(el => el.textContent = currentPenaltyRate);
+        calculatePenaltyPreview();
+    } catch(e) {}
+}
+
+async function updatePenaltyRateFromBag() {
+    const newRate = parseInt(document.getElementById('penaltyRateInput').value);
+    if (isNaN(newRate) || newRate < 0) {
+        showToast('Please enter a valid rate', 'warning');
+        return;
+    }
+    const res = await fetch('/api/penalty-rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rate: newRate })
+    });
+    const data = await res.json();
+    if (data.success) {
+        currentPenaltyRate = data.rate;
+        document.querySelectorAll('.penalty-rate-inline').forEach(el => el.textContent = currentPenaltyRate);
+        showToast(`Penalty rate set to ₹${currentPenaltyRate}/day`, 'success');
+        calculatePenaltyPreview();
+    }
+}
+
+function calculatePenaltyPreview() {
+    const dueDateVal = document.getElementById('dueDateInput').value;
+    const overdueDaysEl = document.getElementById('checkoutOverdueDays');
+    const totalFineEl = document.getElementById('checkoutTotalFine');
+    const paymentStatusEl = document.getElementById('checkoutPaymentStatus');
+
+    if (!dueDateVal) {
+        overdueDaysEl.textContent = '0 days';
+        totalFineEl.textContent = '₹0';
+        totalFineEl.style.color = '#10b981';
+        paymentStatusEl.innerHTML = '<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">No Fine Due</span>';
+        return;
+    }
+
+    const dueDate = new Date(dueDateVal);
+    const now = new Date();
+    const rate = parseInt(document.getElementById('penaltyRateInput').value) || currentPenaltyRate;
+
+    // Check if the due date is in the past relative to right now
+    if (now > dueDate) {
+        const diffMs = now - dueDate;
+        const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+        const fine = diffDays * rate;
+        overdueDaysEl.innerHTML = `<span style="color: #ef4444; font-weight: 700;">${diffDays} day(s) overdue</span>`;
+        totalFineEl.innerHTML = `₹${fine}`;
+        totalFineEl.style.color = '#ef4444';
+        paymentStatusEl.innerHTML = '<span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> Unpaid</span>';
+    } else {
+        overdueDaysEl.innerHTML = '<span style="color: #10b981;">0 days (On Time)</span>';
+        totalFineEl.innerHTML = '₹0';
+        totalFineEl.style.color = '#10b981';
+        paymentStatusEl.innerHTML = '<span class="badge badge-success"><i class="fas fa-check"></i> No Fine Due</span>';
+    }
+}
+
 async function loadBag() {
     const res = await fetch('/api/bag');
     const data = await res.json();
+    currentBag = data.books || [];
     document.getElementById('bagItemCount').textContent = data.count;
     renderBag(data.books);
     updateBagCount(data.count);
@@ -88,17 +205,23 @@ async function loadReaders() {
     const select = document.getElementById('checkoutReader');
     select.innerHTML = '<option value="">-- Select a Reader --</option>' +
         readers.map(r => `<option value="${r.id}" data-name="${r.name}" data-phone="${r.phone}">${r.name} (#${r.id})</option>`).join('');
+}
 
-    select.addEventListener('change', function() {
-        const opt = this.options[this.selectedIndex];
-        document.getElementById('readerNameDisplay').textContent = opt.dataset.name || '';
-        document.getElementById('readerContactDisplay').textContent = opt.dataset.phone || '';
-    });
+function onReaderSelected() {
+    const select = document.getElementById('checkoutReader');
+    const opt = select.options[select.selectedIndex];
+    if (select.value) {
+        document.getElementById('readerNameDisplay').textContent = opt.dataset.name || '-';
+        document.getElementById('readerContactDisplay').textContent = opt.dataset.phone || '-';
+    } else {
+        document.getElementById('readerNameDisplay').textContent = '-';
+        document.getElementById('readerContactDisplay').textContent = '-';
+    }
 }
 
 function renderBag(books) {
     const container = document.getElementById('bagItemsList');
-    if (books.length === 0) {
+    if (!books || books.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-shopping-bag"></i>
@@ -118,7 +241,7 @@ function renderBag(books) {
                 <span>Genre: ${book.genre}</span>
             </div>
             <button class="btn btn-danger btn-sm" onclick="removeFromBag(${book.id})">
-                Remove
+                <i class="fas fa-times"></i> Remove
             </button>
         </div>
     `).join('');
@@ -132,30 +255,68 @@ async function removeFromBag(id) {
 }
 
 async function checkout() {
-    const readerId = document.getElementById('checkoutReader').value;
+    const readerSelect = document.getElementById('checkoutReader');
+    const readerId = readerSelect.value;
+    const dueDate = document.getElementById('dueDateInput').value;
+
+    // 1. Validate Reader ID
     if (!readerId) {
-        showToast('Please select a reader', 'warning');
+        showToast('Validation Error: Please select a Reader ID before issuing!', 'warning');
+        readerSelect.focus();
         return;
     }
-    const res = await fetch('/api/bag/checkout', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ reader_id: parseInt(readerId) })
-    });
-    const result = await res.json();
-    if (result.success) {
-        let msg = 'Books issued: ' + result.issued.join(', ');
-        if (result.errors && result.errors.length > 0) {
-            msg += '\nErrors: ' + result.errors.join(', ');
+
+    // 2. Validate Selected Books
+    if (!currentBag || currentBag.length === 0) {
+        showToast('Validation Error: Your bag is empty! Please add books to issue.', 'warning');
+        return;
+    }
+
+    // 3. Validate Return Due Date & Time
+    if (!dueDate) {
+        showToast('Validation Error: Please select a valid Return Due Date & Time!', 'warning');
+        document.getElementById('dueDateInput').focus();
+        return;
+    }
+
+    const btn = document.getElementById('issueBookBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Issuing Book(s)...';
+
+    try {
+        const res = await fetch('/api/bag/checkout', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                reader_id: parseInt(readerId),
+                due_date: dueDate
+            })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            let msg = 'Success! Book(s) issued: ' + result.issued.join(', ');
+            if (result.errors && result.errors.length > 0) {
+                msg += '\nWarnings: ' + result.errors.join(', ');
+            }
+            showToast(msg, 'success');
+            loadBag();
+            // Reset reader selection
+            readerSelect.value = '';
+            onReaderSelected();
+            setDefaultDueDate();
+        } else {
+            let msg = result.message || 'Issue failed';
+            if (result.errors && result.errors.length > 0) {
+                msg += ': ' + result.errors.join(', ');
+            }
+            showToast(msg, 'error');
         }
-        showToast(msg, 'success');
-        loadBag();
-    } else {
-        let msg = result.message || 'Checkout failed';
-        if (result.errors && result.errors.length > 0) {
-            msg += ': ' + result.errors.join(', ');
-        }
-        showToast(msg, 'error');
+    } catch(err) {
+        showToast('Network error during checkout', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-book-reader"></i> Issue Book';
     }
 }
 </script>
