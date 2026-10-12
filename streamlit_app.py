@@ -1,16 +1,18 @@
 """
 Library Management System - Streamlit Version
-A college mini-project demonstrating Python concepts:
-- Lists for storing records
-- Dictionaries for book/reader data
-- Functions for all operations
-- File handling using JSON files
+Fully integrated with:
+- Books & Readers Management
+- My Bag with Return Due Date & Time Picker
+- Configurable Penalty Charges (default ₹10/day)
+- Overdue Days & Fine Calculation
+- Book Returns with Real-time & Final Penalty Assessment
+- Penalty Payment Tracking (Paid / Unpaid)
 """
 
 import streamlit as st
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ============================================================
 # PAGE CONFIG
@@ -23,6 +25,12 @@ st.set_page_config(
 )
 
 # ============================================================
+# PENALTY RATE CONFIGURATION (Session & Global)
+# ============================================================
+if 'penalty_rate' not in st.session_state:
+    st.session_state.penalty_rate = 10
+
+# ============================================================
 # FILE PATHS - JSON files for persistent storage
 # ============================================================
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -31,17 +39,12 @@ READERS_FILE = os.path.join(DATA_DIR, 'readers.json')
 TRANSACTIONS_FILE = os.path.join(DATA_DIR, 'transactions.json')
 
 
-# ============================================================
-# FILE HANDLING FUNCTIONS - Read/Write JSON files
-# ============================================================
 def ensure_data_dir():
-    """Create data directory if it doesn't exist."""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
 
 
 def load_json_file(filepath):
-    """Load data from a JSON file. Returns a list of dictionaries."""
     ensure_data_dir()
     if not os.path.exists(filepath):
         with open(filepath, 'w') as f:
@@ -53,22 +56,57 @@ def load_json_file(filepath):
 
 
 def save_json_file(filepath, data):
-    """Save a list of dictionaries to a JSON file."""
     ensure_data_dir()
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=4)
 
 
 def generate_id(records_list):
-    """Generate the next ID based on existing records in the list."""
     if len(records_list) == 0:
         return 1
     ids = [record['id'] for record in records_list]
     return max(ids) + 1
 
 
+def parse_datetime(dt_str):
+    if not dt_str:
+        return None
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def calculate_penalty(due_date_str, return_date_str=None, rate=None):
+    if rate is None:
+        rate = st.session_state.penalty_rate
+    due_date = parse_datetime(due_date_str)
+    if not due_date:
+        return {'overdue_days': 0, 'penalty_amount': 0, 'is_overdue': False}
+
+    if return_date_str:
+        return_date = parse_datetime(return_date_str) or datetime.now()
+    else:
+        return_date = datetime.now()
+
+    diff = return_date - due_date
+    if diff.total_seconds() > 0:
+        day_diff = (return_date.date() - due_date.date()).days
+        overdue_days = day_diff if day_diff > 0 else 1
+    else:
+        overdue_days = 0
+
+    return {
+        'overdue_days': overdue_days,
+        'penalty_amount': overdue_days * rate,
+        'is_overdue': overdue_days > 0
+    }
+
+
 # ============================================================
-# BOOK FUNCTIONS
+# BOOKS OPERATIONS
 # ============================================================
 def get_all_books():
     return load_json_file(BOOKS_FILE)
@@ -94,51 +132,33 @@ def add_book(title, author, genre, isbn, total_copies):
 def search_books(query):
     books_list = get_all_books()
     query = query.lower()
-    results = [
-        book for book in books_list
-        if query in book['title'].lower()
-        or query in book['author'].lower()
-        or query in book['genre'].lower()
-        or query in book['isbn'].lower()
+    return [
+        b for b in books_list
+        if query in b['title'].lower()
+        or query in b['author'].lower()
+        or query in b['genre'].lower()
+        or query in b['isbn'].lower()
     ]
-    return results
 
 
 def get_book_by_id(book_id):
-    books_list = get_all_books()
-    for book in books_list:
+    for book in get_all_books():
         if book['id'] == book_id:
             return book
     return None
 
 
-def update_book(book_id, title, author, genre, isbn, total_copies):
-    books_list = get_all_books()
-    for i in range(len(books_list)):
-        if books_list[i]['id'] == book_id:
-            diff = int(total_copies) - books_list[i]['total_copies']
-            books_list[i]['title'] = title
-            books_list[i]['author'] = author
-            books_list[i]['genre'] = genre
-            books_list[i]['isbn'] = isbn
-            books_list[i]['total_copies'] = int(total_copies)
-            books_list[i]['available_copies'] = max(0, books_list[i]['available_copies'] + diff)
-            save_json_file(BOOKS_FILE, books_list)
-            return books_list[i]
-    return None
-
-
 def delete_book(book_id):
     books_list = get_all_books()
-    updated_list = [book for book in books_list if book['id'] != book_id]
-    if len(updated_list) < len(books_list):
-        save_json_file(BOOKS_FILE, updated_list)
+    updated = [b for b in books_list if b['id'] != book_id]
+    if len(updated) < len(books_list):
+        save_json_file(BOOKS_FILE, updated)
         return True
     return False
 
 
 # ============================================================
-# READER FUNCTIONS
+# READERS OPERATIONS
 # ============================================================
 def get_all_readers():
     return load_json_file(READERS_FILE)
@@ -162,53 +182,38 @@ def add_reader(name, email, phone, address):
 def search_readers(query):
     readers_list = get_all_readers()
     query = query.lower()
-    results = [
-        reader for reader in readers_list
-        if query in reader['name'].lower()
-        or query in reader['email'].lower()
-        or query in reader['phone'].lower()
+    return [
+        r for r in readers_list
+        if query in r['name'].lower()
+        or query in r['email'].lower()
+        or query in r['phone'].lower()
     ]
-    return results
 
 
 def get_reader_by_id(reader_id):
-    readers_list = get_all_readers()
-    for reader in readers_list:
+    for reader in get_all_readers():
         if reader['id'] == reader_id:
             return reader
     return None
 
 
-def update_reader(reader_id, name, email, phone, address):
-    readers_list = get_all_readers()
-    for i in range(len(readers_list)):
-        if readers_list[i]['id'] == reader_id:
-            readers_list[i]['name'] = name
-            readers_list[i]['email'] = email
-            readers_list[i]['phone'] = phone
-            readers_list[i]['address'] = address
-            save_json_file(READERS_FILE, readers_list)
-            return readers_list[i]
-    return None
-
-
 def delete_reader(reader_id):
     readers_list = get_all_readers()
-    updated_list = [reader for reader in readers_list if reader['id'] != reader_id]
-    if len(updated_list) < len(readers_list):
-        save_json_file(READERS_FILE, updated_list)
+    updated = [r for r in readers_list if r['id'] != reader_id]
+    if len(updated) < len(readers_list):
+        save_json_file(READERS_FILE, updated)
         return True
     return False
 
 
 # ============================================================
-# TRANSACTION FUNCTIONS
+# TRANSACTIONS & RETURNS
 # ============================================================
 def get_all_transactions():
     return load_json_file(TRANSACTIONS_FILE)
 
 
-def issue_books(reader_id, book_ids_list):
+def issue_books(reader_id, book_ids_list, due_date_str):
     transactions_list = get_all_transactions()
     books_list = get_all_books()
     reader = get_reader_by_id(reader_id)
@@ -230,9 +235,7 @@ def issue_books(reader_id, book_ids_list):
 
         already_issued = False
         for txn in transactions_list:
-            if (txn['reader_id'] == reader_id and
-                txn['book_id'] == book_id and
-                txn['status'] == 'issued'):
+            if txn['reader_id'] == reader_id and txn['book_id'] == book_id and txn['status'] == 'issued':
                 already_issued = True
                 break
 
@@ -240,17 +243,21 @@ def issue_books(reader_id, book_ids_list):
             errors.append(f'"{book["title"]}" already issued to this reader')
             continue
 
-        new_transaction = {
+        new_txn = {
             'id': generate_id(transactions_list),
             'reader_id': reader_id,
             'reader_name': reader['name'],
             'book_id': book_id,
             'book_title': book['title'],
             'issue_date': datetime.now().strftime('%Y-%m-%d'),
+            'due_date': due_date_str,
             'return_date': None,
-            'status': 'issued'
+            'status': 'issued',
+            'overdue_days': 0,
+            'penalty_amount': 0,
+            'penalty_paid': False
         }
-        transactions_list.append(new_transaction)
+        transactions_list.append(new_txn)
 
         for i in range(len(books_list)):
             if books_list[i]['id'] == book_id:
@@ -261,7 +268,6 @@ def issue_books(reader_id, book_ids_list):
 
     save_json_file(TRANSACTIONS_FILE, transactions_list)
     save_json_file(BOOKS_FILE, books_list)
-
     return {'success': len(issued) > 0, 'issued': issued, 'errors': errors}
 
 
@@ -277,6 +283,17 @@ def return_book(transaction_id):
             transactions_list[i]['status'] = 'returned'
             transactions_list[i]['return_date'] = datetime.now().strftime('%Y-%m-%d')
 
+            due_date = transactions_list[i].get('due_date')
+            if due_date:
+                pen = calculate_penalty(due_date, transactions_list[i]['return_date'])
+                transactions_list[i]['overdue_days'] = pen['overdue_days']
+                transactions_list[i]['penalty_amount'] = pen['penalty_amount']
+            else:
+                transactions_list[i]['overdue_days'] = 0
+                transactions_list[i]['penalty_amount'] = 0
+
+            transactions_list[i]['penalty_paid'] = False
+
             book_id = transactions_list[i]['book_id']
             for j in range(len(books_list)):
                 if books_list[j]['id'] == book_id:
@@ -285,49 +302,27 @@ def return_book(transaction_id):
 
             save_json_file(TRANSACTIONS_FILE, transactions_list)
             save_json_file(BOOKS_FILE, books_list)
-            return {'success': True, 'message': 'Book returned successfully'}
+
+            msg = 'Book returned successfully.'
+            if transactions_list[i]['penalty_amount'] > 0:
+                msg += f' Overdue by {transactions_list[i]["overdue_days"]} day(s). Fine: ₹{transactions_list[i]["penalty_amount"]}'
+            return {'success': True, 'message': msg}
 
     return {'success': False, 'message': 'Transaction not found'}
 
 
-# ============================================================
-# DASHBOARD FUNCTIONS
-# ============================================================
-def get_dashboard_stats():
-    books_list = get_all_books()
-    readers_list = get_all_readers()
+def pay_penalty(transaction_id):
     transactions_list = get_all_transactions()
-
-    total_books = sum(book['total_copies'] for book in books_list)
-    available_books = sum(book['available_copies'] for book in books_list)
-    issued_books = total_books - available_books
-    total_readers = len(readers_list)
-
-    recent_transactions = sorted(
-        transactions_list, key=lambda x: x['id'], reverse=True
-    )[:10]
-
-    genre_count = {}
-    for book in books_list:
-        genre = book['genre']
-        if genre in genre_count:
-            genre_count[genre] += book['total_copies']
-        else:
-            genre_count[genre] = book['total_copies']
-
-    return {
-        'total_books': total_books,
-        'available_books': available_books,
-        'issued_books': issued_books,
-        'total_readers': total_readers,
-        'total_titles': len(books_list),
-        'recent_transactions': recent_transactions,
-        'genre_distribution': genre_count
-    }
+    for i in range(len(transactions_list)):
+        if transactions_list[i]['id'] == transaction_id:
+            transactions_list[i]['penalty_paid'] = True
+            save_json_file(TRANSACTIONS_FILE, transactions_list)
+            return True
+    return False
 
 
 # ============================================================
-# BAG FUNCTIONS (Session-based)
+# BAG (CART)
 # ============================================================
 def get_bag():
     if 'bag' not in st.session_state:
@@ -363,13 +358,36 @@ def clear_bag():
 
 
 def get_bag_books():
-    bag = get_bag()
-    return [get_book_by_id(bid) for bid in bag if get_book_by_id(bid) is not None]
+    return [get_book_by_id(bid) for bid in get_bag() if get_book_by_id(bid) is not None]
 
 
 # ============================================================
-# SEED DATA
+# DASHBOARD STATS
 # ============================================================
+def get_dashboard_stats():
+    books_list = get_all_books()
+    readers_list = get_all_readers()
+    transactions_list = get_all_transactions()
+
+    total_books = sum(b['total_copies'] for b in books_list)
+    available_books = sum(b['available_copies'] for b in books_list)
+    issued_books = total_books - available_books
+
+    genre_count = {}
+    for b in books_list:
+        g = b['genre']
+        genre_count[g] = genre_count.get(g, 0) + b['total_copies']
+
+    return {
+        'total_books': total_books,
+        'available_books': available_books,
+        'issued_books': issued_books,
+        'total_readers': len(readers_list),
+        'total_titles': len(books_list),
+        'genre_distribution': genre_count
+    }
+
+
 def seed_data():
     sample_books = [
         {'title': 'To Kill a Mockingbird', 'author': 'Harper Lee', 'genre': 'Fiction', 'isbn': '978-0061120084', 'copies': 5},
@@ -377,76 +395,36 @@ def seed_data():
         {'title': 'Data Structures Using C', 'author': 'Reema Thareja', 'genre': 'Computer Science', 'isbn': '978-0198099307', 'copies': 8},
         {'title': 'Introduction to Algorithms', 'author': 'Thomas H. Cormen', 'genre': 'Computer Science', 'isbn': '978-0262033848', 'copies': 4},
         {'title': 'Physics for Engineers', 'author': 'R.K. Gaur', 'genre': 'Science', 'isbn': '978-8131517468', 'copies': 6},
-        {'title': 'Engineering Mathematics', 'author': 'B.S. Grewal', 'genre': 'Mathematics', 'isbn': '978-8174091154', 'copies': 10},
-        {'title': 'The Alchemist', 'author': 'Paulo Coelho', 'genre': 'Fiction', 'isbn': '978-0062315007', 'copies': 4},
-        {'title': 'Python Programming', 'author': 'Mark Lutz', 'genre': 'Computer Science', 'isbn': '978-1449355739', 'copies': 7},
-        {'title': 'Discrete Mathematics', 'author': 'Kenneth H. Rosen', 'genre': 'Mathematics', 'isbn': '978-0073383095', 'copies': 5},
-        {'title': 'Database System Concepts', 'author': 'Abraham Silberschatz', 'genre': 'Computer Science', 'isbn': '978-0078022159', 'copies': 6},
     ]
-
     sample_readers = [
         {'name': 'Aarav Sharma', 'email': 'aarav@email.com', 'phone': '9876543210', 'address': 'Delhi'},
         {'name': 'Priya Patel', 'email': 'priya@email.com', 'phone': '9876543211', 'address': 'Mumbai'},
         {'name': 'Rohan Gupta', 'email': 'rohan@email.com', 'phone': '9876543212', 'address': 'Bangalore'},
-        {'name': 'Sneha Reddy', 'email': 'sneha@email.com', 'phone': '9876543213', 'address': 'Hyderabad'},
-        {'name': 'Vikram Singh', 'email': 'vikram@email.com', 'phone': '9876543214', 'address': 'Pune'},
     ]
-
     if len(get_all_books()) > 0 or len(get_all_readers()) > 0:
         return False, 'Data already exists. Clear data first.'
-
-    for book in sample_books:
-        add_book(book['title'], book['author'], book['genre'], book['isbn'], book['copies'])
-    for reader in sample_readers:
-        add_reader(reader['name'], reader['email'], reader['phone'], reader['address'])
-
-    return True, f'Added {len(sample_books)} books and {len(sample_readers)} readers'
-
-
-def clear_all_data():
-    save_json_file(BOOKS_FILE, [])
-    save_json_file(READERS_FILE, [])
-    save_json_file(TRANSACTIONS_FILE, [])
-    clear_bag()
+    for b in sample_books:
+        add_book(b['title'], b['author'], b['genre'], b['isbn'], b['copies'])
+    for r in sample_readers:
+        add_reader(r['name'], r['email'], r['phone'], r['address'])
+    return True, f'Loaded {len(sample_books)} books and {len(sample_readers)} readers.'
 
 
 # ============================================================
-# CUSTOM CSS
-# ============================================================
-st.markdown("""
-<style>
-    .main-header { font-size: 2.5rem; font-weight: 800; text-align: center; 
-        background: linear-gradient(135deg, #4f46e5, #ec4899);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem; }
-    .sub-header { text-align: center; color: #64748b; margin-bottom: 2rem; }
-    .stat-box { background: white; border-radius: 12px; padding: 24px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.06); text-align: center; border: 1px solid #f0f0f0; }
-    .stat-number { font-size: 2.2rem; font-weight: 800; color: #1e293b; }
-    .stat-label { font-size: 0.85rem; color: #64748b; font-weight: 600; letter-spacing: 0.5px; }
-    .book-row { background: white; border-radius: 10px; padding: 16px 20px;
-        margin-bottom: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.04);
-        border-left: 4px solid #4f46e5; }
-    .bag-item { background: white; border-radius: 10px; padding: 16px 20px;
-        margin-bottom: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.04);
-        border-left: 4px solid #ec4899; }
-    .stButton>button { border-radius: 8px; }
-    div[data-testid="stSidebar"] { background: linear-gradient(180deg, #f8fafc, #eef2ff); }
-</style>
-""", unsafe_allow_html=True)
-
-
-# ============================================================
-# SIDEBAR NAVIGATION
+# SIDEBAR
 # ============================================================
 with st.sidebar:
     st.markdown("## 📚 Library OS")
     st.markdown("---")
     page = st.radio(
-        "Navigate",
-        ["🏠 Home", "📖 Books", "👥 Readers", "🛒 My Bag", "🔄 Returns", "📊 Dashboard"],
+        "Navigation",
+        ["🏠 Home", "📖 Books", "👥 Readers", "🛒 My Bag", "🔄 Returns & Penalties", "📊 Dashboard"],
         label_visibility="collapsed"
     )
+    st.markdown("---")
+    st.subheader("⚙️ Settings")
+    st.session_state.penalty_rate = st.number_input("Penalty Rate (₹/day)", min_value=0, max_value=500, value=st.session_state.penalty_rate)
+    st.caption(f"Active Rate: **₹{st.session_state.penalty_rate} / day**")
     st.markdown("---")
     bag_count = len(get_bag())
     if bag_count > 0:
@@ -454,201 +432,168 @@ with st.sidebar:
 
 
 # ============================================================
-# HOME PAGE
+# 1. HOME PAGE
 # ============================================================
 if page == "🏠 Home":
-    st.markdown('<h1 class="main-header">Library Management System</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">A modern, efficient system to manage books, readers, and transactions.</p>', unsafe_allow_html=True)
+    st.title("📚 Library Management System")
+    st.markdown("A modern, efficient platform for managing books, readers, checkout due dates, and penalty fines.")
 
     stats = get_dashboard_stats()
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(f'<div class="stat-box"><div class="stat-number">{stats["total_books"]}</div><div class="stat-label">TOTAL BOOKS</div></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div class="stat-box"><div class="stat-number">{stats["available_books"]}</div><div class="stat-label">AVAILABLE</div></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div class="stat-box"><div class="stat-number">{stats["issued_books"]}</div><div class="stat-label">ISSUED</div></div>', unsafe_allow_html=True)
-    with col4:
-        st.markdown(f'<div class="stat-box"><div class="stat-number">{stats["total_readers"]}</div><div class="stat-label">READERS</div></div>', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Books", stats['total_books'])
+    c2.metric("Available", stats['available_books'])
+    c3.metric("Currently Borrowed", stats['issued_books'])
+    c4.metric("Registered Readers", stats['total_readers'])
 
     st.markdown("---")
-    st.subheader("Quick Start")
-    col1, col2 = st.columns(2)
-    with col1:
+    colA, colB = st.columns(2)
+    with colA:
         if st.button("📥 Load Sample Data", use_container_width=True):
-            success, msg = seed_data()
-            if success:
+            ok, msg = seed_data()
+            if ok:
                 st.success(msg)
                 st.rerun()
             else:
                 st.warning(msg)
-    with col2:
+    with colB:
         if st.button("🗑️ Clear All Data", use_container_width=True):
-            clear_all_data()
-            st.success("All data cleared!")
+            save_json_file(BOOKS_FILE, [])
+            save_json_file(READERS_FILE, [])
+            save_json_file(TRANSACTIONS_FILE, [])
+            clear_bag()
+            st.success("All data cleared successfully!")
             st.rerun()
 
 
 # ============================================================
-# BOOKS PAGE
+# 2. BOOKS PAGE
 # ============================================================
 elif page == "📖 Books":
-    st.header("📖 Books Management")
+    st.header("📖 Books Catalog")
 
-    # Search
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        search_query = st.text_input("Search", placeholder="Search by title, author, genre or ISBN...", label_visibility="collapsed")
-    with col2:
-        add_book_btn = st.button("➕ Add Book", use_container_width=True)
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        search_query = st.text_input("Search catalog", placeholder="Search by title, author, genre or ISBN...", label_visibility="collapsed")
+    with c2:
+        if st.button("➕ Add Book", use_container_width=True):
+            st.session_state.show_add_book = True
 
-    if add_book_btn:
-        st.session_state.show_add_book = True
-
-    # Add Book Form
     if st.session_state.get('show_add_book', False):
-        with st.expander("📝 Add New Book", expanded=True):
-            with st.form("add_book_form"):
-                title = st.text_input("Book Title")
-                col1, col2 = st.columns(2)
-                with col1:
-                    author = st.text_input("Author")
-                    isbn = st.text_input("ISBN")
-                with col2:
-                    genre = st.text_input("Genre")
-                    total_copies = st.number_input("Total Copies", min_value=1, value=1)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    submitted = st.form_submit_button("💾 Save Book", use_container_width=True)
-                with col2:
-                    cancel = st.form_submit_button("Cancel", use_container_width=True)
-
-                if submitted and title and author and genre and isbn:
-                    add_book(title, author, genre, isbn, total_copies)
+        with st.expander("Add New Book", expanded=True):
+            with st.form("book_form"):
+                t = st.text_input("Title")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    a = st.text_input("Author")
+                    i = st.text_input("ISBN")
+                with col_b:
+                    g = st.text_input("Genre")
+                    copies = st.number_input("Total Copies", min_value=1, value=5)
+                sub = st.form_submit_button("Save Book")
+                if sub and t and a and g and i:
+                    add_book(t, a, g, i, copies)
                     st.session_state.show_add_book = False
-                    st.success(f'"{title}" added successfully!')
-                    st.rerun()
-                if cancel:
-                    st.session_state.show_add_book = False
+                    st.success(f'Book "{t}" added!')
                     st.rerun()
 
-    # Book list
     books = search_books(search_query) if search_query else get_all_books()
-    st.caption(f"{len(books)} book(s) available.")
+    st.caption(f"{len(books)} books available.")
 
-    for book in books:
-        col1, col2, col3, col4 = st.columns([1, 5, 2, 2])
-        with col1:
+    for b in books:
+        c1, c2, c3, c4 = st.columns([1, 6, 2, 1])
+        with c1:
             st.markdown("📕")
-        with col2:
-            st.markdown(f"**{book['title']}**")
-            st.caption(f"Written by {book['author']} · {book['genre']} · ISBN: {book['isbn']}")
-            avail = book['available_copies']
-            total = book['total_copies']
-            color = "green" if avail > 0 else "red"
-            st.markdown(f":{color}[{avail}/{total} available]")
-        with col3:
-            if st.button("🛒 Add to bag", key=f"bag_{book['id']}", disabled=book['available_copies'] <= 0):
-                result = add_to_bag(book['id'])
-                if result['success']:
-                    st.success(result['message'])
+        with c2:
+            st.markdown(f"**{b['title']}**")
+            st.caption(f"By {b['author']} · Genre: {b['genre']} · ISBN: {b['isbn']}")
+            color = "green" if b['available_copies'] > 0 else "red"
+            st.markdown(f":{color}[{b['available_copies']} / {b['total_copies']} copies available]")
+        with c3:
+            if st.button("🛒 Add to Bag", key=f"add_{b['id']}", disabled=b['available_copies'] <= 0):
+                res = add_to_bag(b['id'])
+                if res['success']:
+                    st.success(res['message'])
+                    st.rerun()
                 else:
-                    st.warning(result['message'])
-                st.rerun()
-        with col4:
-            if st.button("🗑️ Delete", key=f"del_{book['id']}"):
-                delete_book(book['id'])
-                st.success("Book deleted")
+                    st.warning(res['message'])
+        with c4:
+            if st.button("🗑️", key=f"del_{b['id']}"):
+                delete_book(b['id'])
+                st.success("Deleted")
                 st.rerun()
         st.divider()
 
 
 # ============================================================
-# READERS PAGE
+# 3. READERS PAGE
 # ============================================================
 elif page == "👥 Readers":
-    st.header("👥 Readers Management")
+    st.header("👥 Readers Directory")
 
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        reader_search = st.text_input("Search", placeholder="Search by name, email or phone...", label_visibility="collapsed", key="reader_search")
-    with col2:
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        rq = st.text_input("Search readers", placeholder="Search by name, email or phone...", label_visibility="collapsed")
+    with c2:
         if st.button("➕ Register Reader", use_container_width=True):
             st.session_state.show_add_reader = True
 
-    # Add Reader Form
     if st.session_state.get('show_add_reader', False):
-        with st.expander("📝 Register New Reader", expanded=True):
-            with st.form("add_reader_form"):
+        with st.expander("Register Reader", expanded=True):
+            with st.form("reader_form"):
                 name = st.text_input("Full Name")
-                col1, col2 = st.columns(2)
-                with col1:
+                ca, cb = st.columns(2)
+                with ca:
                     email = st.text_input("Email")
-                with col2:
+                with cb:
                     phone = st.text_input("Phone")
                 address = st.text_input("Address")
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    submitted = st.form_submit_button("💾 Save Reader", use_container_width=True)
-                with col2:
-                    cancel = st.form_submit_button("Cancel", use_container_width=True)
-
-                if submitted and name and email and phone and address:
+                sub = st.form_submit_button("Register")
+                if sub and name and email and phone:
                     add_reader(name, email, phone, address)
                     st.session_state.show_add_reader = False
-                    st.success(f'"{name}" registered!')
-                    st.rerun()
-                if cancel:
-                    st.session_state.show_add_reader = False
+                    st.success(f'Reader "{name}" registered!')
                     st.rerun()
 
-    # Readers list
-    readers = search_readers(reader_search) if reader_search else get_all_readers()
-    st.caption(f"{len(readers)} reader(s) registered.")
-
-    if len(readers) > 0:
-        for reader in readers:
-            col1, col2, col3 = st.columns([1, 6, 1])
-            with col1:
-                st.markdown("👤")
-            with col2:
-                st.markdown(f"**{reader['name']}** (#{reader['id']})")
-                st.caption(f"📧 {reader['email']} · 📱 {reader['phone']} · 📍 {reader['address']} · Registered: {reader['date_registered']}")
-            with col3:
-                if st.button("🗑️", key=f"del_r_{reader['id']}"):
-                    delete_reader(reader['id'])
-                    st.success("Reader deleted")
-                    st.rerun()
-            st.divider()
+    readers = search_readers(rq) if rq else get_all_readers()
+    st.caption(f"{len(readers)} readers registered.")
+    for r in readers:
+        c1, c2, c3 = st.columns([1, 7, 1])
+        with c1:
+            st.markdown("👤")
+        with c2:
+            st.markdown(f"**{r['name']}** (#{r['id']})")
+            st.caption(f"📧 {r['email']} · 📱 {r['phone']} · 📍 {r['address']} · Registered: {r['date_registered']}")
+        with c3:
+            if st.button("🗑️", key=f"del_r_{r['id']}"):
+                delete_reader(r['id'])
+                st.rerun()
+        st.divider()
 
 
 # ============================================================
-# MY BAG PAGE
+# 4. MY BAG & CHECKOUT PAGE
 # ============================================================
 elif page == "🛒 My Bag":
     st.header("🛒 My Bag")
 
     bag_books = get_bag_books()
-
     col_left, col_right = st.columns([3, 2])
 
     with col_left:
         st.subheader(f"Books in your bag — {len(bag_books)}")
         if len(bag_books) == 0:
-            st.info("Your bag is empty. Browse the **Books** page to add some!")
+            st.info("Your bag is currently empty. Browse books to add items.")
         else:
-            for book in bag_books:
-                col1, col2, col3 = st.columns([1, 5, 1])
-                with col1:
+            for b in bag_books:
+                ca, cb, cc = st.columns([1, 6, 1])
+                with ca:
                     st.markdown("📕")
-                with col2:
-                    st.markdown(f"**{book['title']}**")
-                    st.caption(f"Written by {book['author']} · {book['genre']}")
-                with col3:
-                    if st.button("❌", key=f"rem_{book['id']}"):
-                        remove_from_bag(book['id'])
+                with cb:
+                    st.markdown(f"**{b['title']}**")
+                    st.caption(f"Author: {b['author']} · Genre: {b['genre']}")
+                with cc:
+                    if st.button("❌", key=f"rem_{b['id']}"):
+                        remove_from_bag(b['id'])
                         st.rerun()
                 st.divider()
 
@@ -657,130 +602,166 @@ elif page == "🛒 My Bag":
         readers = get_all_readers()
 
         if len(readers) == 0:
-            st.warning("No readers registered. Register a reader first!")
+            st.warning("No readers registered. Please register a reader first.")
         else:
-            reader_options = {f"{r['name']} (#{r['id']})": r for r in readers}
-            selected = st.selectbox("Select Reader", ["-- Select --"] + list(reader_options.keys()))
+            reader_map = {f"{r['name']} (#{r['id']})": r for r in readers}
+            selected_reader_key = st.selectbox("Reader ID *", ["-- Select a Reader --"] + list(reader_map.keys()))
 
-            if selected != "-- Select --":
-                r = reader_options[selected]
-                st.markdown(f"**Name:** {r['name']}")
-                st.markdown(f"**Contact:** {r['phone']}")
+            if selected_reader_key != "-- Select a Reader --":
+                reader_obj = reader_map[selected_reader_key]
+                st.markdown(f"**Name:** {reader_obj['name']}")
+                st.markdown(f"**Contact:** {reader_obj['phone']}")
 
             st.markdown(f"**Issue Date:** {datetime.now().strftime('%B %d, %Y, %I:%M %p')}")
-            st.markdown(f"**Return Due Date:** {(datetime.now().replace(day=datetime.now().day)).strftime('%B %d, %Y')}")
 
-            if st.button("✅ Issue Books", use_container_width=True, type="primary", disabled=len(bag_books) == 0):
-                if selected == "-- Select --":
-                    st.error("Please select a reader!")
+            # Return Due Date & Time Picker
+            st.markdown("---")
+            st.markdown("##### 📅 Return Due Date & Time")
+            default_due_date = datetime.now() + timedelta(days=14)
+            due_d = st.date_input("Due Date *", value=default_due_date.date())
+            due_t = st.time_input("Due Time *", value=default_due_date.time().replace(second=0, microsecond=0))
+
+            combined_due_dt = datetime.combine(due_d, due_t)
+            due_date_iso = combined_due_dt.strftime('%Y-%m-%dT%H:%M')
+
+            # Penalty Charges & Real-time Overdue preview
+            st.markdown("---")
+            st.markdown("##### 💰 Penalty Charges")
+            st.markdown(f"**Penalty Rate:** ₹{st.session_state.penalty_rate} per day")
+
+            now = datetime.now()
+            if now > combined_due_dt:
+                diff_days = max(1, (now.date() - combined_due_dt.date()).days or 1)
+                fine_preview = diff_days * st.session_state.penalty_rate
+                st.markdown(f"**Overdue Days:** :red[{diff_days} day(s) overdue]")
+                st.markdown(f"**Total Fine:** :red[₹{fine_preview}]")
+                st.markdown("**Payment Status:** :red[Unpaid]")
+            else:
+                st.markdown("**Overdue Days:** :green[0 days (On Time)]")
+                st.markdown("**Total Fine:** :green[₹0]")
+                st.markdown("**Payment Status:** :green[No Fine Due]")
+
+            st.markdown("---")
+            # Issue Book Button with full validation
+            if st.button("📖 Issue Book", use_container_width=True, type="primary"):
+                # 1. Validate reader
+                if selected_reader_key == "-- Select a Reader --":
+                    st.error("Validation Error: Please select a Reader ID before issuing.")
+                # 2. Validate bag books
+                elif len(bag_books) == 0:
+                    st.error("Validation Error: Your bag is empty. Please add books to issue.")
                 else:
-                    r = reader_options[selected]
-                    result = issue_books(r['id'], [b['id'] for b in bag_books])
+                    reader_obj = reader_map[selected_reader_key]
+                    result = issue_books(reader_obj['id'], [b['id'] for b in bag_books], due_date_iso)
                     if result['success']:
                         clear_bag()
-                        st.success("Books issued: " + ", ".join(result['issued']))
+                        st.success(f"Success! Book(s) issued: {', '.join(result['issued'])}")
                         st.rerun()
                     else:
-                        st.error(result.get('message', 'Checkout failed'))
-
-        st.markdown("---")
-        st.caption("**Library Rules:**")
-        st.caption("• Readers should not mark, underline, write, or tear pages.")
-        st.caption("• No Library material can be taken out without permission.")
-        st.caption("• Books are issued for a maximum of two weeks.")
+                        st.error(result.get('message', 'Issue failed'))
 
 
 # ============================================================
-# RETURNS PAGE
+# 5. RETURNS & PENALTIES PAGE
 # ============================================================
-elif page == "🔄 Returns":
-    st.header("🔄 Book Returns")
+elif page == "🔄 Returns & Penalties":
+    st.header("🔄 Book Returns & Overdue Penalties")
 
-    transactions = get_all_transactions()
+    txns = get_all_transactions()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        status_filter = st.selectbox("Filter by Status", ["All", "issued", "returned"])
-    with col2:
-        readers = get_all_readers()
-        reader_filter_options = ["All Readers"] + [f"{r['name']} (#{r['id']})" for r in readers]
-        reader_filter = st.selectbox("Filter by Reader", reader_filter_options)
+    c1, c2 = st.columns(2)
+    with c1:
+        st_filter = st.selectbox("Status Filter", ["All", "issued", "returned"])
+    with c2:
+        all_r = get_all_readers()
+        r_choices = ["All Readers"] + [f"{r['name']} (#{r['id']})" for r in all_r]
+        rf_filter = st.selectbox("Reader Filter", r_choices)
 
-    if status_filter != "All":
-        transactions = [t for t in transactions if t['status'] == status_filter]
-    if reader_filter != "All Readers":
-        rid = int(reader_filter.split('#')[1].rstrip(')'))
-        transactions = [t for t in transactions if t['reader_id'] == rid]
+    filtered_txns = txns
+    if st_filter != "All":
+        filtered_txns = [t for t in filtered_txns if t['status'] == st_filter]
+    if rf_filter != "All Readers":
+        target_id = int(rf_filter.split('#')[1].rstrip(')'))
+        filtered_txns = [t for t in filtered_txns if t['reader_id'] == target_id]
 
-    st.caption(f"{len(transactions)} transaction(s) found.")
+    st.caption(f"{len(filtered_txns)} transaction(s) found.")
 
-    if len(transactions) == 0:
-        st.info("No transactions found.")
+    if len(filtered_txns) == 0:
+        st.info("No matching transactions found.")
     else:
-        for txn in sorted(transactions, key=lambda x: x['id'], reverse=True):
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            with col1:
-                st.markdown(f"**{txn['book_title']}**")
-                st.caption(f"Reader: {txn['reader_name']}")
-            with col2:
-                st.caption(f"Issued: {txn['issue_date']}")
-                if txn['return_date']:
-                    st.caption(f"Returned: {txn['return_date']}")
-            with col3:
-                if txn['status'] == 'issued':
-                    st.warning("Issued")
+        for t in sorted(filtered_txns, key=lambda x: x['id'], reverse=True):
+            is_issued = t['status'] == 'issued'
+            due_str = t.get('due_date', '')
+
+            # Calculate real-time penalty if currently issued
+            if is_issued and due_str:
+                pen = calculate_penalty(due_str)
+                overdue_days = pen['overdue_days']
+                fine_amount = pen['penalty_amount']
+            else:
+                overdue_days = t.get('overdue_days', 0)
+                fine_amount = t.get('penalty_amount', 0)
+
+            is_paid = t.get('penalty_paid', False)
+
+            colA, colB, colC, colD = st.columns([3, 2, 2, 2])
+            with colA:
+                st.markdown(f"**#{t['id']} · {t['book_title']}**")
+                st.caption(f"Reader: {t['reader_name']} (ID #{t['reader_id']})")
+                st.caption(f"Issued: {t['issue_date']} · Due: {due_str or 'N/A'}")
+            with colB:
+                if t['return_date']:
+                    st.caption(f"Returned on: **{t['return_date']}**")
                 else:
-                    st.success("Returned")
-            with col4:
-                if txn['status'] == 'issued':
-                    if st.button("Return", key=f"ret_{txn['id']}"):
-                        result = return_book(txn['id'])
-                        if result['success']:
-                            st.success(result['message'])
+                    st.markdown(":orange[Currently Issued]")
+
+                if overdue_days > 0:
+                    st.markdown(f":red[{overdue_days} day(s) overdue]")
+                else:
+                    st.markdown(":green[On Time]")
+            with colC:
+                if fine_amount > 0:
+                    st.markdown(f"Fine: **:red[₹{fine_amount}]**")
+                    if is_paid:
+                        st.markdown(":green[Status: Paid]")
+                    else:
+                        st.markdown(":red[Status: Unpaid]")
+                else:
+                    st.markdown(":green[No Fine]")
+            with colD:
+                if is_issued:
+                    if st.button("Return Book", key=f"ret_{t['id']}", use_container_width=True):
+                        res = return_book(t['id'])
+                        if res['success']:
+                            st.success(res['message'])
                             st.rerun()
-                        else:
-                            st.error(result['message'])
+                elif fine_amount > 0 and not is_paid:
+                    if st.button("💵 Mark Paid", key=f"pay_{t['id']}", use_container_width=True, type="primary"):
+                        if pay_penalty(t['id']):
+                            st.success("Fine marked as Paid!")
+                            st.rerun()
+                else:
+                    st.caption("✅ Completed")
             st.divider()
 
 
 # ============================================================
-# DASHBOARD PAGE
+# 6. DASHBOARD PAGE
 # ============================================================
 elif page == "📊 Dashboard":
-    st.header("📊 Dashboard")
-
+    st.header("📊 Library Statistics Dashboard")
     stats = get_dashboard_stats()
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Books", stats['total_books'])
-    with col2:
-        st.metric("Available", stats['available_books'])
-    with col3:
-        st.metric("Issued", stats['issued_books'])
-    with col4:
-        st.metric("Readers", stats['total_readers'])
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Volumes", stats['total_books'])
+    m2.metric("Available", stats['available_books'])
+    m3.metric("Issued", stats['issued_books'])
+    m4.metric("Registered Readers", stats['total_readers'])
 
     st.markdown("---")
-
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.subheader("📚 Genre Distribution")
-        genre_data = stats['genre_distribution']
-        if genre_data:
-            import pandas as pd
-            df = pd.DataFrame(list(genre_data.items()), columns=['Genre', 'Count'])
-            st.bar_chart(df.set_index('Genre'))
-        else:
-            st.info("No books available for genre distribution.")
-
-    with col_right:
-        st.subheader("🕐 Recent Transactions")
-        recent = stats['recent_transactions']
-        if len(recent) == 0:
-            st.info("No recent transactions.")
-        else:
-            for txn in recent:
-                icon = "🔶" if txn['status'] == 'issued' else "✅"
-                st.markdown(f"{icon} **{txn['book_title']}** → {txn['reader_name']} ({txn['issue_date']})")
+    genre_data = stats['genre_distribution']
+    if genre_data:
+        import pandas as pd
+        df = pd.DataFrame(list(genre_data.items()), columns=['Genre', 'Count'])
+        st.subheader("📚 Books by Genre")
+        st.bar_chart(df.set_index('Genre'))
