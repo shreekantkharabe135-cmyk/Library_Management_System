@@ -6,7 +6,7 @@
         "genre": "Fiction",
         "isbn": "978-0061120084",
         "total_copies": 5,
-        "available_copies": 5,
+        "available_copies": 4,
         "date_added": "2026-09-30"
     },
     {
@@ -16,7 +16,7 @@
         "genre": "Fiction",
         "isbn": "978-0743273565",
         "total_copies": 3,
-        "available_copies": 2,
+        "available_copies": 3,
         "date_added": "2026-09-30"
     },
     {
@@ -26,7 +26,7 @@
         "genre": "Computer Science",
         "isbn": "978-0198099307",
         "total_copies": 8,
-        "available_copies": 7,
+        "available_copies": 8,
         "date_added": "2026-09-30"
     },
     {
